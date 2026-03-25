@@ -525,8 +525,8 @@ export function Settings() {
                   setCleanvoiceTestResult(null);
                   setCleanvoiceTestLoading(true);
                   try {
-                    const ok = await testCleanvoiceApi(cleanvoiceKey);
-                    setCleanvoiceTestResult(ok);
+                    await testCleanvoiceApi(cleanvoiceKey);
+                    setCleanvoiceTestResult(true);
                   } catch {
                     setCleanvoiceTestResult(false);
                   } finally {

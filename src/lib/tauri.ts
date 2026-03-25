@@ -109,7 +109,7 @@ export async function readTranscript(filePath: string): Promise<string> {
 // ─── Cleanvoice AI ──────────────────────────────────────────────
 
 export interface CleanvoiceProgress {
-  stage: string;    // "upload", "processing", "download", "done"
+  stage: string;    // "extract", "upload", "processing", "download", "mux", "done"
   message: string;
   percent: number;  // 0-100
 }
@@ -118,12 +118,29 @@ export interface CleanvoiceEnhanceRequest {
   api_key: string;
   input_path: string;
   output_path: string;
-  studio_sound?: boolean;
-  remove_noise?: boolean;
-  normalize?: boolean;
+  // Audio cleaning (features that CUT content)
   fillers?: boolean;
-  mouth_sounds?: boolean;
   long_silences?: boolean;
+  mouth_sounds?: boolean;
+  breath?: boolean | string;  // true | "legacy" | "natural"
+  stutters?: boolean;
+  hesitations?: boolean;
+  muted?: boolean;            // Silence edits instead of cutting
+  // Audio enhancement (no cuts)
+  remove_noise?: boolean;
+  studio_sound?: boolean | string;  // true | "nightly"
+  normalize?: boolean;
+  // Output
+  export_format?: string;     // "auto" | "mp3" | "wav" | "flac" | "m4a"
+  target_lufs?: number;       // -16 is podcast standard
+  // Content generation
+  transcription?: boolean;
+  summarize?: boolean;
+}
+
+export interface CleanvoiceAuthInfo {
+  email?: string;
+  credits?: number;
 }
 
 export async function cleanvoiceEnhance(
@@ -136,7 +153,7 @@ export async function cleanvoiceCancel(): Promise<void> {
   return invoke("cleanvoice_cancel");
 }
 
-export async function testCleanvoiceApi(apiKey: string): Promise<boolean> {
+export async function testCleanvoiceApi(apiKey: string): Promise<CleanvoiceAuthInfo> {
   return invoke("test_cleanvoice_api", { apiKey });
 }
 

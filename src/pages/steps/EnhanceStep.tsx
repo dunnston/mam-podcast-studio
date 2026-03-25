@@ -61,6 +61,68 @@ const PRESETS: Preset[] = [
   },
 ];
 
+// ─── Cleanvoice presets ─────────────────────────────────────────
+
+interface CleanvoicePreset {
+  id: string;
+  label: string;
+  detail: string;
+  config: {
+    remove_noise?: boolean;
+    studio_sound?: boolean | string;
+    normalize?: boolean;
+    fillers?: boolean;
+    long_silences?: boolean;
+    mouth_sounds?: boolean;
+    breath?: boolean | string;
+    stutters?: boolean;
+    hesitations?: boolean;
+  };
+}
+
+const CV_PRESETS: CleanvoicePreset[] = [
+  {
+    id: "enhance",
+    label: "Enhance Only",
+    detail: "Studio sound, noise removal, and normalization. No content cuts. Fastest upload (audio only).",
+    config: {
+      remove_noise: true,
+      studio_sound: true,
+      normalize: true,
+    },
+  },
+  {
+    id: "enhance-edit",
+    label: "Enhance + Edit",
+    detail: "Full enhancement plus filler word, stutter, silence, and mouth sound removal. Sends video for timeline cuts.",
+    config: {
+      remove_noise: true,
+      studio_sound: true,
+      normalize: true,
+      fillers: true,
+      long_silences: true,
+      mouth_sounds: true,
+      stutters: true,
+    },
+  },
+  {
+    id: "full",
+    label: "Full Podcast Edit",
+    detail: "Everything — enhancement, all editing features, and breath reduction. The most aggressive option.",
+    config: {
+      remove_noise: true,
+      studio_sound: true,
+      normalize: true,
+      fillers: true,
+      long_silences: true,
+      mouth_sounds: true,
+      breath: true,
+      stutters: true,
+      hesitations: true,
+    },
+  },
+];
+
 function formatEta(seconds?: number): string {
   if (!seconds) return "";
   if (seconds < 60) return `${Math.round(seconds)}s remaining`;
@@ -91,6 +153,9 @@ export function EnhanceStep() {
   // Two-stage toggles
   const [enableCleanvoice, setEnableCleanvoice] = useState(true);
   const [enableMastering, setEnableMastering] = useState(true);
+
+  // Cleanvoice preset
+  const [cvPreset, setCvPreset] = useState("enhance-edit");
 
   // Processing state
   const [currentStage, setCurrentStage] = useState<"idle" | "cleanvoice" | "mastering" | "muxing">("idle");
@@ -143,11 +208,23 @@ export function EnhanceStep() {
     };
   }, [setProgress]);
 
-  // ─── Build episode name helper ─────────────────────────────────
+  // ─── Helpers ──────────────────────────────────────────────────
   const buildEpisodeName = () => {
     const epNum = currentEpisode?.episode_number || "XX";
     const title = (currentEpisode?.title || "episode").replace(/[^a-zA-Z0-9]/g, "-").slice(0, 40);
     return `MAM-EP${epNum}-${title}`;
+  };
+
+  const getSelectedCvConfig = () => {
+    const preset = CV_PRESETS.find((p) => p.id === cvPreset);
+    return preset?.config || CV_PRESETS[0].config;
+  };
+
+  // Does the selected CV preset have editing features (cuts)?
+  const hasEditingFeatures = () => {
+    const config = getSelectedCvConfig();
+    return !!(config.fillers || config.long_silences || config.mouth_sounds ||
+              config.stutters || config.hesitations || config.breath);
   };
 
   // ─── Main enhancement handler ─────────────────────────────────
@@ -174,39 +251,35 @@ export function EnhanceStep() {
     const finalOutputPath = `${enhancedVideoDirectory}/${episodeName}-enhanced.mp4`;
 
     try {
-      let audioForMastering = inputPath; // If no Cleanvoice, FFmpeg works on original
+      let audioForMastering = inputPath;
 
-      // ── Stage 1: Cleanvoice AI Clean & Restore ──────────────
+      // ── Stage 1: Cleanvoice AI ───────────────────────────────
       if (enableCleanvoice) {
         setCurrentStage("cleanvoice");
         setCleanvoiceMessage("Starting Cleanvoice AI...");
 
-        // Extract audio to temp WAV for Cleanvoice upload
-        const tempWav = `${enhancedVideoDirectory}/${episodeName}-temp-input.wav`;
-        const tempCleanWav = `${enhancedVideoDirectory}/${episodeName}-temp-clean.wav`;
+        const cvConfig = getSelectedCvConfig();
+        const isEditing = hasEditingFeatures();
 
-        // Extract audio from video using FFmpeg
-        setCleanvoiceMessage("Extracting audio from video...");
-        await enhanceAudio(
-          inputPath,
-          tempWav,
-          "extract-audio-only", // We'll handle this in Rust as a special preset
-          videoInfo.duration_seconds
-        ).catch(() => {
-          // Fallback: use a simple FFmpeg extract command
-          // The enhance_audio with special preset extracts audio
-        });
-
-        // For now, send the original file to Cleanvoice
-        // Cleanvoice can handle video files directly
-        setCleanvoiceMessage("Uploading to Cleanvoice AI...");
+        // Determine output: if editing, Cleanvoice returns video; if enhance-only, returns audio
+        const cvOutputPath = isEditing
+          ? `${enhancedVideoDirectory}/${episodeName}-cv-enhanced.mp4`
+          : `${enhancedVideoDirectory}/${episodeName}-cv-enhanced.aac`;
 
         const cleanResult = await cleanvoiceEnhance({
           api_key: aiEnhancementApiKey,
-          input_path: inputPath, // Cleanvoice accepts video formats too
-          output_path: tempCleanWav,
-          studio_sound: true,
-          remove_noise: true,
+          input_path: inputPath,
+          output_path: cvOutputPath,
+          // Pass all config options
+          remove_noise: cvConfig.remove_noise,
+          studio_sound: cvConfig.studio_sound,
+          normalize: cvConfig.normalize,
+          fillers: cvConfig.fillers,
+          long_silences: cvConfig.long_silences,
+          mouth_sounds: cvConfig.mouth_sounds,
+          breath: cvConfig.breath,
+          stutters: cvConfig.stutters,
+          hesitations: cvConfig.hesitations,
         });
 
         audioForMastering = cleanResult;
@@ -227,20 +300,11 @@ export function EnhanceStep() {
         );
 
         setEnhancedPath(result);
-      } else if (enableCleanvoice) {
-        // Cleanvoice only — mux the clean audio back into the video
-        setCurrentStage("muxing");
-        setCleanvoiceMessage("Muxing enhanced audio back into video...");
-
-        // Use FFmpeg to replace audio in original video with Cleanvoice output
-        const result = await enhanceAudio(
-          audioForMastering, // Cleanvoice output
-          finalOutputPath,
-          "passthrough", // Special preset: no processing, just copy/mux
-          videoInfo.duration_seconds
-        );
-
-        setEnhancedPath(result);
+      } else {
+        // No mastering — Cleanvoice output IS the final output
+        // If Cleanvoice returned a video (editing mode), we're done
+        // If Cleanvoice returned audio (enhance-only), the mux already happened in Rust
+        setEnhancedPath(audioForMastering);
       }
 
       const outputPath = enhancedPath || finalOutputPath;
@@ -345,10 +409,65 @@ export function EnhanceStep() {
               {!hasCleanvoiceKey && <Badge variant="warning">No API Key</Badge>}
             </div>
             <p style={{ fontFamily: "var(--font-body)", fontSize: "12px", color: "var(--color-text-muted)", lineHeight: "1.5" }}>
-              AI-powered studio sound, noise removal, and voice isolation. Transforms home recordings into studio quality. Requires a Cleanvoice API key.
+              AI-powered studio sound, noise removal, and voice isolation. Can also remove filler words, stutters, and long silences.
             </p>
           </div>
         </button>
+
+        {/* Cleanvoice preset selector */}
+        {enableCleanvoice && (
+          <div style={{ marginTop: "12px", paddingLeft: "34px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px" }}>
+              {CV_PRESETS.map((preset) => {
+                const isSelected = cvPreset === preset.id;
+                return (
+                  <button
+                    key={preset.id}
+                    onClick={() => !isProcessing && setCvPreset(preset.id)}
+                    style={{
+                      display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "8px",
+                      padding: "14px",
+                      backgroundColor: "var(--color-surface)",
+                      border: `1px solid ${isSelected ? "var(--color-sage)" : "var(--color-border)"}`,
+                      borderRadius: "10px",
+                      cursor: isProcessing ? "default" : "pointer",
+                      textAlign: "left",
+                      transition: "border-color 150ms ease",
+                      boxShadow: isSelected ? "0 0 0 1px var(--color-sage)" : "none",
+                      position: "relative",
+                    }}
+                  >
+                    {isSelected && (
+                      <div style={{ position: "absolute", top: "10px", right: "10px", color: "var(--color-sage)" }}>
+                        <Check size={13} />
+                      </div>
+                    )}
+                    <p style={{ fontFamily: "var(--font-body)", fontSize: "13px", fontWeight: "600", color: "var(--color-cream)", marginBottom: "3px" }}>
+                      {preset.label}
+                    </p>
+                    <p style={{ fontFamily: "var(--font-body)", fontSize: "11px", color: "var(--color-text-muted)", lineHeight: "1.4" }}>
+                      {preset.detail}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Smart routing info */}
+            <div style={{
+              marginTop: "10px",
+              padding: "8px 12px",
+              backgroundColor: "rgba(122, 139, 111, 0.06)",
+              borderRadius: "6px",
+              fontFamily: "var(--font-body)", fontSize: "11px", color: "var(--color-text-muted)",
+            }}>
+              {hasEditingFeatures()
+                ? "📹 Video will be uploaded to Cleanvoice for timeline editing (fillers, silences, etc. will be cut)"
+                : "🎵 Audio will be extracted and uploaded (faster — video stream not needed for enhancement-only)"
+              }
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Stage 2: FFmpeg Broadcast Mastering ──────────────── */}
@@ -466,21 +585,25 @@ export function EnhanceStep() {
             Pipeline
           </p>
           <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-            <span style={pipelineStepStyle}>📹 Original Video</span>
+            <span style={pipelineStepStyle}>Original Video</span>
             {enableCleanvoice && (
               <>
                 <span style={pipelineArrowStyle}>→</span>
-                <span style={{ ...pipelineStepStyle, color: "var(--color-sage)" }}>✨ Cleanvoice AI</span>
+                <span style={{ ...pipelineStepStyle, color: "var(--color-sage)" }}>
+                  Cleanvoice AI ({CV_PRESETS.find(p => p.id === cvPreset)?.label})
+                </span>
               </>
             )}
             {enableMastering && (
               <>
                 <span style={pipelineArrowStyle}>→</span>
-                <span style={{ ...pipelineStepStyle, color: "var(--color-sage)" }}>🎛️ FFmpeg Master ({enhancementPreset})</span>
+                <span style={{ ...pipelineStepStyle, color: "var(--color-sage)" }}>
+                  FFmpeg Master ({enhancementPreset})
+                </span>
               </>
             )}
             <span style={pipelineArrowStyle}>→</span>
-            <span style={pipelineStepStyle}>🎬 Enhanced Video</span>
+            <span style={pipelineStepStyle}>Enhanced Video</span>
           </div>
         </div>
       )}
@@ -511,7 +634,7 @@ export function EnhanceStep() {
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <Loader2 size={16} style={{ color: "var(--color-sage)", animation: "spin 1s linear infinite" }} />
             <span style={{ fontFamily: "var(--font-body)", fontSize: "13px", fontWeight: "600", color: "var(--color-cream)" }}>
-              {currentStage === "cleanvoice" && "Stage 1: AI Clean & Restore"}
+              {currentStage === "cleanvoice" && "Stage 1: Cleanvoice AI"}
               {currentStage === "mastering" && "Stage 2: Broadcast Mastering"}
               {currentStage === "muxing" && "Muxing audio into video..."}
             </span>
