@@ -5,6 +5,7 @@ import { EnhanceStep } from "./steps/EnhanceStep";
 import { ExtractStep } from "./steps/ExtractStep";
 import { ShowNotesStep } from "./steps/ShowNotesStep";
 import { ReviewStep } from "./steps/ReviewStep";
+import { PublishStep } from "./steps/PublishStep";
 import { Check } from "lucide-react";
 
 interface StepConfig {
@@ -19,6 +20,7 @@ const STEPS: StepConfig[] = [
   { id: "extract", label: "Extract Audio", shortLabel: "Extract" },
   { id: "show-notes", label: "Show Notes", shortLabel: "Show Notes" },
   { id: "review", label: "Review", shortLabel: "Review" },
+  { id: "publish", label: "Publish", shortLabel: "Publish" },
 ];
 
 const STEP_ORDER: WizardStep[] = [
@@ -27,6 +29,7 @@ const STEP_ORDER: WizardStep[] = [
   "extract",
   "show-notes",
   "review",
+  "publish",
 ];
 
 function getStepIndex(step: WizardStep): number {
@@ -196,8 +199,12 @@ export function NewEpisode() {
         description: "Upload a transcript and generate AI-powered show notes.",
       },
       review: {
-        title: "Review & Done",
-        description: "Review everything before finishing.",
+        title: "Review",
+        description: "Review everything before publishing.",
+      },
+      publish: {
+        title: "Publish",
+        description: "Publish your episode to Podbean and YouTube.",
       },
     };
 
@@ -260,7 +267,7 @@ export function NewEpisode() {
       </div>
 
       {/* Step back navigation */}
-      {currentIndex > 0 && currentStep !== "review" && (
+      {currentIndex > 0 && currentStep !== "publish" && (
         <button
           onClick={() => setCurrentStep(STEP_ORDER[currentIndex - 1])}
           style={{
@@ -296,6 +303,7 @@ export function NewEpisode() {
         {currentStep === "extract" && <ExtractStep />}
         {currentStep === "show-notes" && <ShowNotesStep />}
         {currentStep === "review" && <ReviewStep />}
+        {currentStep === "publish" && <PublishStep />}
       </div>
     </div>
   );
