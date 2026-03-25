@@ -106,6 +106,40 @@ export async function readTranscript(filePath: string): Promise<string> {
   return invoke("read_transcript", { filePath });
 }
 
+// ─── Cleanvoice AI ──────────────────────────────────────────────
+
+export interface CleanvoiceProgress {
+  stage: string;    // "upload", "processing", "download", "done"
+  message: string;
+  percent: number;  // 0-100
+}
+
+export interface CleanvoiceEnhanceRequest {
+  api_key: string;
+  input_path: string;
+  output_path: string;
+  studio_sound?: boolean;
+  remove_noise?: boolean;
+  normalize?: boolean;
+  fillers?: boolean;
+  mouth_sounds?: boolean;
+  long_silences?: boolean;
+}
+
+export async function cleanvoiceEnhance(
+  request: CleanvoiceEnhanceRequest
+): Promise<string> {
+  return invoke("cleanvoice_enhance", { request });
+}
+
+export async function cleanvoiceCancel(): Promise<void> {
+  return invoke("cleanvoice_cancel");
+}
+
+export async function testCleanvoiceApi(apiKey: string): Promise<boolean> {
+  return invoke("test_cleanvoice_api", { apiKey });
+}
+
 // ─── Settings ───────────────────────────────────────────────────
 
 export async function testClaudeApi(apiKey: string): Promise<boolean> {
@@ -118,6 +152,14 @@ export function onEnhancementProgress(
   callback: (progress: ProcessingProgress) => void
 ): Promise<UnlistenFn> {
   return listen<ProcessingProgress>("enhancement-progress", (event) => {
+    callback(event.payload);
+  });
+}
+
+export function onCleanvoiceProgress(
+  callback: (progress: CleanvoiceProgress) => void
+): Promise<UnlistenFn> {
+  return listen<CleanvoiceProgress>("cleanvoice-progress", (event) => {
     callback(event.payload);
   });
 }

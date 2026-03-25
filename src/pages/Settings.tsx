@@ -13,6 +13,7 @@ import { useSettingsStore } from "../stores/settingsStore";
 import { getAllSettings, setSetting } from "../lib/database";
 import {
   testClaudeApi,
+  testCleanvoiceApi,
   selectOutputDirectory,
 } from "../lib/tauri";
 import { Tabs, TabPanel } from "../components/ui/Tabs";
@@ -131,12 +132,15 @@ export function Settings() {
   const [namingTemplate, setNamingTemplate] = useState(store.fileNamingTemplate);
   const [autoIncrement, setAutoIncrement] = useState(store.autoIncrementEpisode);
   const [claudeKey, setClaudeKey] = useState(store.claudeApiKey);
+  const [cleanvoiceKey, setCleanvoiceKey] = useState(store.aiEnhancementApiKey);
   const [showNotesTemplate, setShowNotesTemplate] = useState(DEFAULT_TEMPLATE);
 
   // API test state
   const [claudeTestStatus, setClaudeTestStatus] = useState<
     "idle" | "testing" | "ok" | "fail"
   >("idle");
+  const [cleanvoiceTestResult, setCleanvoiceTestResult] = useState<boolean | null>(null);
+  const [cleanvoiceTestLoading, setCleanvoiceTestLoading] = useState(false);
 
   const [saved, setSaved] = useState<Record<string, boolean>>({});
 
@@ -150,6 +154,7 @@ export function Settings() {
       setNamingTemplate(settings.fileNamingTemplate || "MAM-{episode_number}-{title}");
       setAutoIncrement(settings.autoIncrementEpisode !== "false");
       setClaudeKey(settings.claudeApiKey || "");
+      setCleanvoiceKey(settings.aiEnhancementApiKey || "");
       setShowNotesTemplate(settings.showNotesTemplate || DEFAULT_TEMPLATE);
     });
   }, []);
@@ -188,6 +193,11 @@ export function Settings() {
   const handleSaveClaude = async () => {
     store.setClaudeApiKey(claudeKey);
     await saveSetting("claudeApiKey", claudeKey);
+  };
+
+  const handleSaveCleanvoice = async () => {
+    store.setAiEnhancementApiKey(cleanvoiceKey);
+    await saveSetting("aiEnhancementApiKey", cleanvoiceKey);
   };
 
   const sectionStyle: React.CSSProperties = {
@@ -477,44 +487,67 @@ export function Settings() {
             )}
           </div>
 
-          {/* AI Enhancement */}
+          {/* Cleanvoice AI */}
           <div>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "10px",
-                marginBottom: "4px",
-              }}
-            >
-              <p style={{ ...labelStyle, marginBottom: 0 }}>
-                AI Enhancement API Key
-              </p>
-              <span
-                style={{
-                  padding: "2px 8px",
-                  backgroundColor: "var(--color-border)",
-                  borderRadius: "5px",
-                  fontFamily: "var(--font-body)",
-                  fontSize: "10px",
-                  fontWeight: "600",
-                  letterSpacing: "0.06em",
-                  textTransform: "uppercase",
-                  color: "var(--color-text-muted)",
-                }}
-              >
-                Coming Soon
-              </span>
-            </div>
+            <p style={labelStyle}>Cleanvoice API Key</p>
             <p style={descStyle}>
-              For future AI-powered audio enhancement (noise removal, stem separation).
+              For AI-powered studio sound, noise removal, and voice isolation.{" "}
+              <a
+                href="https://app.cleanvoice.ai/developer"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: "var(--color-sage)", textDecoration: "underline" }}
+              >
+                Get your API key
+              </a>
             </p>
-            <PasswordInput
-              value=""
-              onChange={() => {}}
-              placeholder="API key — not yet available"
-              disabled
-            />
+            <div style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}>
+              <div style={{ flex: 1 }}>
+                <PasswordInput
+                  value={cleanvoiceKey}
+                  onChange={(e) => setCleanvoiceKey(e.target.value)}
+                  placeholder="Enter your Cleanvoice API key"
+                />
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleSaveCleanvoice}
+                disabled={!cleanvoiceKey}
+                icon={<Save size={13} />}
+              >
+                Save
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={async () => {
+                  setCleanvoiceTestResult(null);
+                  setCleanvoiceTestLoading(true);
+                  try {
+                    const ok = await testCleanvoiceApi(cleanvoiceKey);
+                    setCleanvoiceTestResult(ok);
+                  } catch {
+                    setCleanvoiceTestResult(false);
+                  } finally {
+                    setCleanvoiceTestLoading(false);
+                  }
+                }}
+                disabled={!cleanvoiceKey || cleanvoiceTestLoading}
+              >
+                {cleanvoiceTestLoading ? "Testing..." : "Test"}
+              </Button>
+            </div>
+            {cleanvoiceTestResult === true && (
+              <p style={{ ...descStyle, color: "var(--color-sage)", display: "flex", alignItems: "center", gap: "6px", marginTop: "6px" }}>
+                <CheckCircle2 size={13} /> Connected to Cleanvoice AI
+              </p>
+            )}
+            {cleanvoiceTestResult === false && (
+              <p style={{ ...descStyle, color: "#E57373", display: "flex", alignItems: "center", gap: "6px", marginTop: "6px" }}>
+                <XCircle size={13} /> Connection failed. Check your API key.
+              </p>
+            )}
           </div>
         </div>
       </TabPanel>

@@ -1,4 +1,5 @@
 mod commands;
+mod cleanvoice;
 mod db;
 mod ffmpeg;
 mod claude;
@@ -42,6 +43,10 @@ pub fn run() {
             // Show notes commands
             commands::show_notes::generate_show_notes,
             commands::show_notes::read_transcript,
+            // Cleanvoice commands
+            commands::cleanvoice::cleanvoice_enhance,
+            commands::cleanvoice::cleanvoice_cancel,
+            commands::cleanvoice::test_cleanvoice_api,
             // Settings commands
             commands::settings::get_setting,
             commands::settings::set_setting,
