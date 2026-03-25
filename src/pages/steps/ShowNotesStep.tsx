@@ -105,6 +105,7 @@ export function ShowNotesStep() {
     setShowNotesContent,
     setShowNotesEdited,
     setCurrentStep,
+    wizardSessionId,
   } = useEpisodeStore();
 
   const { claudeApiKey } = useSettingsStore();
@@ -145,6 +146,9 @@ export function ShowNotesStep() {
   const handleGenerate = async () => {
     if (!transcriptText || !claudeApiKey) return;
 
+    const sessionId = wizardSessionId;
+    const isStale = () => useEpisodeStore.getState().wizardSessionId !== sessionId;
+
     setIsGenerating(true);
     setError(null);
 
@@ -154,6 +158,9 @@ export function ShowNotesStep() {
         transcriptText,
         DEFAULT_SYSTEM_PROMPT
       );
+
+      if (isStale()) return;
+
       setGenerationResult(result);
       setShowNotesContent(result.content);
       setShowNotesEdited(result.content);
@@ -172,9 +179,13 @@ export function ShowNotesStep() {
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Generation failed.");
+      if (!isStale()) {
+        setError(err instanceof Error ? err.message : "Generation failed.");
+      }
     } finally {
-      setIsGenerating(false);
+      if (!isStale()) {
+        setIsGenerating(false);
+      }
     }
   };
 

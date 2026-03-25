@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { listEpisodes } from "../lib/database";
 import type { EpisodeRow } from "../lib/database";
+import { useNewEpisode } from "../hooks/useNewEpisode";
 import { Badge } from "../components/ui/Badge";
 import type { BadgeVariant } from "../components/ui/Badge";
 
@@ -134,6 +135,7 @@ function QuickActionCard({
 
 export function Dashboard() {
   const navigate = useNavigate();
+  const startNewEpisode = useNewEpisode();
 
   const { data: episodes = [], isLoading } = useQuery({
     queryKey: ["episodes"],
@@ -220,7 +222,7 @@ export function Dashboard() {
             icon={<PlusCircle size={24} />}
             accentColor="var(--color-terracotta)"
             accentBg="rgba(196, 116, 90, 0.15)"
-            onClick={() => navigate("/new-episode")}
+            onClick={startNewEpisode}
             large
           />
           <QuickActionCard
@@ -375,7 +377,7 @@ export function Dashboard() {
               </p>
             </div>
             <button
-              onClick={() => navigate("/new-episode")}
+              onClick={startNewEpisode}
               style={{
                 display: "flex",
                 alignItems: "center",

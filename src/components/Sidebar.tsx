@@ -10,6 +10,7 @@ import {
   PanelLeftOpen,
 } from "lucide-react";
 import { useUIStore } from "../stores/uiStore";
+import { useNewEpisode } from "../hooks/useNewEpisode";
 
 interface NavItem {
   label: string;
@@ -37,6 +38,7 @@ export function Sidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { sidebarCollapsed, toggleSidebar } = useUIStore();
+  const startNewEpisode = useNewEpisode();
 
   const isActive = (path: string) => {
     if (path === "/") return location.pathname === "/";
@@ -147,7 +149,14 @@ export function Sidebar() {
               <li key={item.path}>
                 <div style={{ position: "relative" }}>
                   <button
-                    onClick={() => !item.disabled && navigate(item.path)}
+                    onClick={() => {
+                      if (item.disabled) return;
+                      if (item.path === "/new-episode") {
+                        startNewEpisode();
+                        return;
+                      }
+                      navigate(item.path);
+                    }}
                     disabled={item.disabled}
                     title={sidebarCollapsed ? item.label : undefined}
                     aria-current={active ? "page" : undefined}

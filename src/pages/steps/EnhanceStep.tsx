@@ -146,6 +146,7 @@ export function EnhanceStep() {
     processingEta,
     setProcessing,
     setProgress,
+    wizardSessionId,
   } = useEpisodeStore();
 
   const { enhancedVideoDirectory, aiEnhancementApiKey } = useSettingsStore();
@@ -241,6 +242,10 @@ export function EnhanceStep() {
       return;
     }
 
+    // Capture session ID so we can detect if the wizard was reset mid-flight
+    const sessionId = wizardSessionId;
+    const isStale = () => useEpisodeStore.getState().wizardSessionId !== sessionId;
+
     setError(null);
     setProcessing(true);
     setProgress(0);
@@ -307,6 +312,9 @@ export function EnhanceStep() {
         setEnhancedPath(audioForMastering);
       }
 
+      // Bail if the wizard was reset while we were processing
+      if (isStale()) return;
+
       const outputPath = enhancedPath || finalOutputPath;
       setEnhancedPath(outputPath);
       setCompleted(true);
@@ -318,11 +326,13 @@ export function EnhanceStep() {
             enhanced_video_path: outputPath,
             status: "enhanced",
           });
-          setCurrentEpisode({
-            ...currentEpisode,
-            enhanced_video_path: outputPath,
-            status: "enhanced",
-          });
+          if (!isStale()) {
+            setCurrentEpisode({
+              ...currentEpisode,
+              enhanced_video_path: outputPath,
+              status: "enhanced",
+            });
+          }
         } catch (e) {
           console.error("Failed to update episode in DB:", e);
         }
@@ -334,8 +344,10 @@ export function EnhanceStep() {
         setError(err instanceof Error ? err.message : String(err));
       }
     } finally {
-      setProcessing(false);
-      setProgress(0);
+      if (!isStale()) {
+        setProcessing(false);
+        setProgress(0);
+      }
       setCurrentStage("idle");
     }
   };
