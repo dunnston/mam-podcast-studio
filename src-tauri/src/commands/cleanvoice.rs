@@ -110,7 +110,7 @@ pub async fn cleanvoice_enhance(
         *cancelled = false;
     }
 
-    eprintln!("[Cleanvoice] Starting enhancement: {:?}", request);
+    eprintln!("[Cleanvoice] Starting enhancement for: {}", request.input_path);
 
     let client = CleanvoiceClient::new(&request.api_key);
     let input_path = PathBuf::from(&request.input_path);

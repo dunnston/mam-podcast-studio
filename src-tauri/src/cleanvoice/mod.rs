@@ -133,13 +133,17 @@ pub struct EditResult {
     pub summary: Option<serde_json::Value>,
 }
 
-/// Response from POST /v2/uploads
+/// Response from POST /v2/upload(s)
+/// Handles both old format (signedUrl) and new format (upload_url/file_url)
 #[derive(Deserialize, Debug)]
 pub struct UploadResponse {
     /// Signed URL for PUT upload
+    #[serde(alias = "upload_url", alias = "signedUrl")]
     pub upload_url: String,
     /// URL to use in the edit request files array
-    pub file_url: String,
+    /// Falls back to upload_url if not present
+    #[serde(alias = "file_url", default)]
+    pub file_url: Option<String>,
 }
 
 /// Response from GET /v2/auth
@@ -188,30 +192,68 @@ impl CleanvoiceClient {
     }
 
     /// Step 1: Request a signed upload URL from Cleanvoice
-    /// POST /v2/upload { "filename": "...", "content_type": "..." }
+    /// Try multiple endpoint variants since docs are inconsistent
     pub async fn request_upload(&self, filename: &str, content_type: &str) -> Result<UploadResponse> {
-        let body = serde_json::json!({
-            "filename": filename,
-            "content_type": content_type,
-        });
+        // Try both JSON body and query param variants
+        let endpoints = [
+            // Variant 1: /v2/upload (singular) with query params (original working endpoint)
+            ("query", format!("{}/upload", BASE_URL)),
+            // Variant 2: /v2/uploads (plural) with JSON body (per docs)
+            ("json", format!("{}/uploads", BASE_URL)),
+        ];
 
-        let resp = self
-            .http
-            .post(format!("{}/upload", BASE_URL))
-            .header("X-API-Key", &self.api_key)
-            .header("Content-Type", "application/json")
-            .json(&body)
-            .send()
-            .await
-            .context("Failed to request upload URL")?;
+        for (variant, url) in &endpoints {
+            eprintln!("[Cleanvoice] Trying upload URL: {} ({})", url, variant);
 
-        if !resp.status().is_success() {
+            let resp = if *variant == "query" {
+                self.http
+                    .post(url)
+                    .header("X-API-Key", &self.api_key)
+                    .query(&[("filename", filename), ("content_type", content_type)])
+                    .send()
+                    .await
+            } else {
+                let body = serde_json::json!({
+                    "filename": filename,
+                    "content_type": content_type,
+                });
+                self.http
+                    .post(url)
+                    .header("X-API-Key", &self.api_key)
+                    .header("Content-Type", "application/json")
+                    .json(&body)
+                    .send()
+                    .await
+            };
+
+            let resp = match resp {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("[Cleanvoice] {} variant failed to connect: {}", variant, e);
+                    continue;
+                }
+            };
+
             let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
-            anyhow::bail!("Upload URL request failed ({}): {}", status, body);
+            let resp_text = resp.text().await.unwrap_or_default();
+            eprintln!("[Cleanvoice] {} response ({}): {}", variant, status, resp_text);
+
+            if status.is_success() {
+                let parsed: UploadResponse = serde_json::from_str(&resp_text)
+                    .context("Failed to parse upload response")?;
+                return Ok(parsed);
+            }
+
+            // If 404, try next variant
+            if status.as_u16() == 404 {
+                continue;
+            }
+
+            // Any other error, bail
+            anyhow::bail!("Upload URL request failed ({}): {}", status, resp_text);
         }
 
-        resp.json().await.context("Failed to parse upload response")
+        anyhow::bail!("All upload endpoint variants returned 404. The Cleanvoice upload API may have changed.")
     }
 
     /// Step 2: PUT file bytes to the signed upload URL
@@ -394,7 +436,7 @@ impl CleanvoiceClient {
 
         let request = EditRequest {
             input: EditInput {
-                files: vec![upload_resp.file_url],
+                files: vec![upload_resp.file_url.unwrap_or_else(|| upload_resp.upload_url.clone())],
                 config,
             },
         };
