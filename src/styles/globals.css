@@ -1,0 +1,92 @@
+@import url("https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
+@import "tailwindcss";
+
+@theme {
+  /* Brand Colors */
+  --color-sage: #7A8B6F;
+  --color-sage-dark: #5C6B52;
+  --color-sage-light: #9AAB8F;
+  --color-terracotta: #C4745A;
+  --color-terracotta-dark: #A85D45;
+  --color-terracotta-light: #D4917B;
+  --color-cream: #F5F0E8;
+  --color-bark: #3D2E1E;
+  --color-charcoal: #1A1A1A;
+  --color-surface: #232323;
+  --color-surface-light: #2D2D2D;
+  --color-border: #3A3A3A;
+  --color-text-muted: #A09A90;
+
+  /* Typography */
+  --font-display: "Cormorant Garamond", Georgia, serif;
+  --font-body: "DM Sans", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", monospace;
+
+  /* Sidebar widths */
+  --spacing-sidebar: 240px;
+  --spacing-sidebar-collapsed: 64px;
+}
+
+/* Base styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: var(--color-charcoal);
+  color: var(--color-cream);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-charcoal);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}
+
+/* Display headings use serif */
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+}
+
+/* Prevent text selection on UI chrome */
+.no-select {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Drag region for Tauri window */
+.drag-region {
+  -webkit-app-region: drag;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
+}
