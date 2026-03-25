@@ -12,6 +12,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { useEpisodeStore } from "../../stores/episodeStore";
+import { useNewEpisode } from "../../hooks/useNewEpisode";
 
 interface SummaryCardProps {
   title: string;
@@ -116,8 +117,8 @@ export function ReviewStep() {
     selectedFormats,
     showNotesContent,
     showNotesEdited,
-    resetWizard,
   } = useEpisodeStore();
+  const handleStartNew = useNewEpisode();
 
   const hasImport = Boolean(currentEpisode?.original_video_path && videoInfo);
   const hasEnhancement = Boolean(currentEpisode?.enhanced_video_path);
@@ -128,11 +129,6 @@ export function ReviewStep() {
   const wordCount = notesContent
     ? notesContent.trim().split(/\s+/).filter(Boolean).length
     : 0;
-
-  const handleStartNew = () => {
-    resetWizard();
-    navigate("/new-episode");
-  };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>

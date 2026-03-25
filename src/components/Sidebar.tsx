@@ -10,7 +10,7 @@ import {
   PanelLeftOpen,
 } from "lucide-react";
 import { useUIStore } from "../stores/uiStore";
-import { useEpisodeStore } from "../stores/episodeStore";
+import { useNewEpisode } from "../hooks/useNewEpisode";
 
 interface NavItem {
   label: string;
@@ -38,7 +38,7 @@ export function Sidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { sidebarCollapsed, toggleSidebar } = useUIStore();
-  const { resetWizard } = useEpisodeStore();
+  const startNewEpisode = useNewEpisode();
 
   const isActive = (path: string) => {
     if (path === "/") return location.pathname === "/";
@@ -151,7 +151,10 @@ export function Sidebar() {
                   <button
                     onClick={() => {
                       if (item.disabled) return;
-                      if (item.path === "/new-episode") resetWizard();
+                      if (item.path === "/new-episode") {
+                        startNewEpisode();
+                        return;
+                      }
                       navigate(item.path);
                     }}
                     disabled={item.disabled}

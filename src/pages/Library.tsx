@@ -23,6 +23,7 @@ import {
 } from "../lib/database";
 import { useEpisodeStore } from "../stores/episodeStore";
 import type { Episode } from "../stores/episodeStore";
+import { useNewEpisode } from "../hooks/useNewEpisode";
 import type { EpisodeRow } from "../lib/database";
 import { Badge } from "../components/ui/Badge";
 import type { BadgeVariant } from "../components/ui/Badge";
@@ -530,7 +531,8 @@ export function Library() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
-  const { loadEpisode, resetWizard } = useEpisodeStore();
+  const { loadEpisode } = useEpisodeStore();
+  const startNewEpisode = useNewEpisode();
 
   const { data: episodes = [], isLoading } = useQuery({
     queryKey: ["episodes"],
@@ -619,7 +621,7 @@ export function Library() {
           variant="primary"
           size="md"
           icon={<PlusCircle size={15} />}
-          onClick={() => { resetWizard(); navigate("/new-episode"); }}
+          onClick={startNewEpisode}
         >
           New Episode
         </Button>
@@ -749,7 +751,7 @@ export function Library() {
             <Button
               variant="primary"
               icon={<PlusCircle size={15} />}
-              onClick={() => { resetWizard(); navigate("/new-episode"); }}
+              onClick={startNewEpisode}
             >
               Create First Episode
             </Button>

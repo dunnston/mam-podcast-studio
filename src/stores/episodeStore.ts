@@ -54,6 +54,9 @@ interface EpisodeState {
   processingProgress: number;
   processingEta: string;
 
+  // Session tracking — incremented on reset to invalidate in-flight async work
+  wizardSessionId: number;
+
   // Actions
   setCurrentStep: (step: WizardStep) => void;
   setCurrentEpisode: (episode: Episode | null) => void;
@@ -79,6 +82,7 @@ const initialState = {
   isProcessing: false,
   processingProgress: 0,
   processingEta: "",
+  wizardSessionId: 0,
 };
 
 export const useEpisodeStore = create<EpisodeState>((set) => ({
@@ -94,7 +98,7 @@ export const useEpisodeStore = create<EpisodeState>((set) => ({
   setProcessing: (processing) => set({ isProcessing: processing }),
   setProgress: (progress, eta) =>
     set({ processingProgress: progress, processingEta: eta || "" }),
-  resetWizard: () => set(initialState),
+  resetWizard: () => set((state) => ({ ...initialState, wizardSessionId: state.wizardSessionId + 1 })),
   loadEpisode: (episode, showNotes) => {
     // Determine which step to resume at based on episode status
     let step: WizardStep = "import";
