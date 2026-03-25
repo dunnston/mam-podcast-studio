@@ -9,6 +9,11 @@ interface SettingsState {
   // API keys
   claudeApiKey: string;
   aiEnhancementApiKey: string;
+  podbeanClientId: string;
+  podbeanClientSecret: string;
+  youtubeClientId: string;
+  youtubeClientSecret: string;
+  youtubeRefreshToken: string;
 
   // Preferences
   fileNamingTemplate: string;
@@ -25,6 +30,11 @@ interface SettingsState {
   setOutputDirectory: (dir: string) => void;
   setClaudeApiKey: (key: string) => void;
   setAiEnhancementApiKey: (key: string) => void;
+  setPodbeanClientId: (key: string) => void;
+  setPodbeanClientSecret: (key: string) => void;
+  setYoutubeClientId: (key: string) => void;
+  setYoutubeClientSecret: (key: string) => void;
+  setYoutubeRefreshToken: (token: string) => void;
   setFileNamingTemplate: (template: string) => void;
   setAutoIncrementEpisode: (auto: boolean) => void;
   setDefaultTags: (tags: string[]) => void;
@@ -37,6 +47,11 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   showNotesDirectory: "",
   claudeApiKey: "",
   aiEnhancementApiKey: "",
+  podbeanClientId: "",
+  podbeanClientSecret: "",
+  youtubeClientId: "",
+  youtubeClientSecret: "",
+  youtubeRefreshToken: "",
   fileNamingTemplate: "MAM-{episode_number}-{title}",
   autoIncrementEpisode: true,
   defaultTags: [],
@@ -50,6 +65,11 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     set({ outputDirectory: dir, extractedAudioDirectory: dir }),
   setClaudeApiKey: (key) => set({ claudeApiKey: key }),
   setAiEnhancementApiKey: (key) => set({ aiEnhancementApiKey: key }),
+  setPodbeanClientId: (key) => set({ podbeanClientId: key }),
+  setPodbeanClientSecret: (key) => set({ podbeanClientSecret: key }),
+  setYoutubeClientId: (key) => set({ youtubeClientId: key }),
+  setYoutubeClientSecret: (key) => set({ youtubeClientSecret: key }),
+  setYoutubeRefreshToken: (token) => set({ youtubeRefreshToken: token }),
   setFileNamingTemplate: (template) => set({ fileNamingTemplate: template }),
   setAutoIncrementEpisode: (auto) => set({ autoIncrementEpisode: auto }),
   setDefaultTags: (tags) => set({ defaultTags: tags }),
@@ -63,6 +83,11 @@ export const useSettingsStore = create<SettingsState>((set) => ({
         settings.extractedAudioDirectory || settings.outputDirectory || "",
       claudeApiKey: settings.claudeApiKey || "",
       aiEnhancementApiKey: settings.aiEnhancementApiKey || "",
+      podbeanClientId: settings.podbeanClientId || "",
+      podbeanClientSecret: settings.podbeanClientSecret || "",
+      youtubeClientId: settings.youtubeClientId || "",
+      youtubeClientSecret: settings.youtubeClientSecret || "",
+      youtubeRefreshToken: settings.youtubeRefreshToken || "",
       fileNamingTemplate:
         settings.fileNamingTemplate || "MAM-{episode_number}-{title}",
       autoIncrementEpisode: settings.autoIncrementEpisode !== "false",

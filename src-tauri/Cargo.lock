@@ -2197,6 +2197,7 @@ name = "mam-podcast-studio"
 version = "1.0.0"
 dependencies = [
  "anyhow",
+ "open",
  "reqwest 0.12.28",
  "serde",
  "serde_json",

@@ -12,7 +12,8 @@ export type WizardStep =
   | "enhance"
   | "extract"
   | "show-notes"
-  | "review";
+  | "review"
+  | "publish";
 
 export interface Episode {
   id?: number;
@@ -112,7 +113,7 @@ export const useEpisodeStore = create<EpisodeState>((set) => ({
       step = "show-notes";
     }
     if (episode.status === "published") {
-      step = "review";
+      step = "publish";
     }
 
     set({
