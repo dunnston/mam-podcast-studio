@@ -72,11 +72,11 @@ export function FrameCapture({ videoPath, onPhotosChange }: FrameCaptureProps) {
       );
       const dataUrl = `data:image/png;base64,${base64}`;
 
-      updateSlot(slot.id, { rawFrame: dataUrl, isCapturing: false });
+      updateSlot(slot.id, { rawFrame: dataUrl, cutoutFrame: null, isCapturing: false });
 
       // Sync photos
       const updated = slots.map((s) =>
-        s.id === slot.id ? { ...s, rawFrame: dataUrl, isCapturing: false } : s
+        s.id === slot.id ? { ...s, rawFrame: dataUrl, cutoutFrame: null, isCapturing: false } : s
       );
       syncPhotos(updated);
     } catch (e) {

@@ -52,11 +52,19 @@ export function ThumbnailStep() {
     if (!previewRef.current) return;
     setIsExporting(true);
     try {
-      const dataUrl = await toPng(previewRef.current, {
+      // Temporarily remove scale transform for full-size export
+      const node = previewRef.current;
+      const originalTransform = node.style.transform;
+      node.style.transform = "scale(1)";
+
+      const dataUrl = await toPng(node, {
         width: 1280,
         height: 720,
         pixelRatio: 1,
       });
+
+      // Restore scale transform
+      node.style.transform = originalTransform;
 
       const epNum = currentEpisode?.episode_number || 0;
       const defaultName = `MAM-EP${epNum}-thumbnail.png`;
