@@ -6,6 +6,7 @@ import {
   AudioWaveform,
   FileAudio,
   FileText,
+  Image as ImageIcon,
   FolderOpen,
   PlusCircle,
   Library,
@@ -116,6 +117,8 @@ export function ReviewStep() {
     selectedFormats,
     showNotesContent,
     showNotesEdited,
+    thumbnailConfig,
+    thumbnailExportedPath,
     resetWizard,
   } = useEpisodeStore();
 
@@ -123,6 +126,7 @@ export function ReviewStep() {
   const hasEnhancement = Boolean(currentEpisode?.enhanced_video_path);
   const hasExtraction = selectedFormats.length > 0;
   const hasShowNotes = Boolean(showNotesContent || showNotesEdited);
+  const hasThumbnail = Boolean(thumbnailExportedPath || (thumbnailConfig && thumbnailConfig.photos.length > 0));
 
   const notesContent = showNotesEdited || showNotesContent;
   const wordCount = notesContent
@@ -325,9 +329,42 @@ export function ReviewStep() {
         )}
       </SummaryCard>
 
+      <SummaryCard
+        title="Thumbnail"
+        icon={<ImageIcon size={16} />}
+        completed={hasThumbnail}
+      >
+        {hasThumbnail ? (
+          <>
+            <DataRow
+              label="Template"
+              value={thumbnailConfig?.templateId === "split-panel" ? "Split Panel" : "Bold Banner"}
+            />
+            <DataRow label="Photos" value={`${thumbnailConfig?.photos.length || 0} cutout(s)`} />
+            {thumbnailExportedPath && (
+              <DataRow
+                label="Exported to"
+                value={thumbnailExportedPath.split(/[\\/]/).pop()}
+              />
+            )}
+          </>
+        ) : (
+          <p
+            style={{
+              fontFamily: "var(--font-body)",
+              fontSize: "13px",
+              color: "var(--color-text-muted)",
+            }}
+          >
+            Thumbnail not created
+          </p>
+        )}
+      </SummaryCard>
+
       {/* File locations */}
       {(currentEpisode?.original_video_path ||
-        currentEpisode?.enhanced_video_path) && (
+        currentEpisode?.enhanced_video_path ||
+        thumbnailExportedPath) && (
         <div>
           <p
             style={{
@@ -357,6 +394,10 @@ export function ReviewStep() {
               {
                 label: "Enhanced",
                 path: currentEpisode?.enhanced_video_path,
+              },
+              {
+                label: "Thumbnail",
+                path: thumbnailExportedPath,
               },
             ]
               .filter((f) => f.path)

@@ -47,6 +47,9 @@ pub fn run() {
             commands::cleanvoice::cleanvoice_enhance,
             commands::cleanvoice::cleanvoice_cancel,
             commands::cleanvoice::test_cleanvoice_api,
+            // Thumbnail commands
+            commands::thumbnail::extract_frame,
+            commands::thumbnail::remove_background,
             // Settings commands
             commands::settings::get_setting,
             commands::settings::set_setting,

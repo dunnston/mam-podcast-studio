@@ -12,6 +12,7 @@ export type WizardStep =
   | "enhance"
   | "extract"
   | "show-notes"
+  | "thumbnail"
   | "review";
 
 export interface Episode {
@@ -26,6 +27,17 @@ export interface Episode {
   status: EpisodeStatus;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface ThumbnailConfig {
+  templateId: string;
+  headline: string;
+  subline: string;
+  episodeLabel: string;
+  accentColor: string;
+  backgroundColor: string;
+  textColor: string;
+  photos: string[]; // base64 data URLs (background-removed cutouts)
 }
 
 export interface VideoInfo {
@@ -49,6 +61,10 @@ interface EpisodeState {
   showNotesContent: string;
   showNotesEdited: string;
 
+  // Thumbnail state
+  thumbnailConfig: ThumbnailConfig | null;
+  thumbnailExportedPath: string | null;
+
   // Processing state
   isProcessing: boolean;
   processingProgress: number;
@@ -62,6 +78,8 @@ interface EpisodeState {
   setSelectedFormats: (formats: string[]) => void;
   setShowNotesContent: (content: string) => void;
   setShowNotesEdited: (content: string) => void;
+  setThumbnailConfig: (config: ThumbnailConfig | null) => void;
+  setThumbnailExportedPath: (path: string | null) => void;
   setProcessing: (processing: boolean) => void;
   setProgress: (progress: number, eta?: string) => void;
   resetWizard: () => void;
@@ -76,6 +94,8 @@ const initialState = {
   selectedFormats: ["mp3", "m4a"],
   showNotesContent: "",
   showNotesEdited: "",
+  thumbnailConfig: null as ThumbnailConfig | null,
+  thumbnailExportedPath: null as string | null,
   isProcessing: false,
   processingProgress: 0,
   processingEta: "",
@@ -91,6 +111,8 @@ export const useEpisodeStore = create<EpisodeState>((set) => ({
   setSelectedFormats: (formats) => set({ selectedFormats: formats }),
   setShowNotesContent: (content) => set({ showNotesContent: content }),
   setShowNotesEdited: (content) => set({ showNotesEdited: content }),
+  setThumbnailConfig: (config) => set({ thumbnailConfig: config }),
+  setThumbnailExportedPath: (path) => set({ thumbnailExportedPath: path }),
   setProcessing: (processing) => set({ isProcessing: processing }),
   setProgress: (progress, eta) =>
     set({ processingProgress: progress, processingEta: eta || "" }),

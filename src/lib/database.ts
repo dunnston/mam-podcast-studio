@@ -72,6 +72,19 @@ async function getDb() {
   `);
 
   await db.execute(`
+    CREATE TABLE IF NOT EXISTS thumbnails (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      episode_id INTEGER NOT NULL,
+      template_id TEXT NOT NULL,
+      config_json TEXT NOT NULL,
+      exported_path TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (episode_id) REFERENCES episodes(id) ON DELETE CASCADE
+    );
+  `);
+
+  await db.execute(`
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL,
@@ -306,6 +319,50 @@ export async function getShowNotes(
   return conn.select(
     "SELECT * FROM show_notes WHERE episode_id = $1 ORDER BY version DESC",
     [episodeId]
+  );
+}
+
+// ─── Thumbnails ────────────────────────────────────────────────
+
+export async function saveThumbnail(data: {
+  episode_id: number;
+  template_id: string;
+  config_json: string;
+  exported_path?: string;
+}): Promise<number> {
+  const conn = await getDb();
+  // Upsert: replace existing thumbnail for this episode
+  await conn.execute(
+    "DELETE FROM thumbnails WHERE episode_id = $1",
+    [data.episode_id]
+  );
+  const result = await conn.execute(
+    `INSERT INTO thumbnails (episode_id, template_id, config_json, exported_path)
+     VALUES ($1, $2, $3, $4)`,
+    [data.episode_id, data.template_id, data.config_json, data.exported_path || null]
+  );
+  return result.lastInsertId;
+}
+
+export async function getThumbnail(
+  episodeId: number
+): Promise<{ id: number; template_id: string; config_json: string; exported_path: string | null } | null> {
+  const conn = await getDb();
+  const rows: any[] = await conn.select(
+    "SELECT * FROM thumbnails WHERE episode_id = $1 ORDER BY updated_at DESC LIMIT 1",
+    [episodeId]
+  );
+  return rows[0] || null;
+}
+
+export async function updateThumbnailExportPath(
+  id: number,
+  path: string
+): Promise<void> {
+  const conn = await getDb();
+  await conn.execute(
+    "UPDATE thumbnails SET exported_path = $1, updated_at = datetime('now') WHERE id = $2",
+    [path, id]
   );
 }
 

@@ -4,3 +4,4 @@ pub mod enhance;
 pub mod extract;
 pub mod settings;
 pub mod show_notes;
+pub mod thumbnail;

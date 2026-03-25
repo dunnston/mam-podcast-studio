@@ -9,6 +9,7 @@ interface SettingsState {
   // API keys
   claudeApiKey: string;
   aiEnhancementApiKey: string;
+  removeBgApiKey: string;
 
   // Preferences
   fileNamingTemplate: string;
@@ -25,6 +26,7 @@ interface SettingsState {
   setOutputDirectory: (dir: string) => void;
   setClaudeApiKey: (key: string) => void;
   setAiEnhancementApiKey: (key: string) => void;
+  setRemoveBgApiKey: (key: string) => void;
   setFileNamingTemplate: (template: string) => void;
   setAutoIncrementEpisode: (auto: boolean) => void;
   setDefaultTags: (tags: string[]) => void;
@@ -37,6 +39,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   showNotesDirectory: "",
   claudeApiKey: "",
   aiEnhancementApiKey: "",
+  removeBgApiKey: "",
   fileNamingTemplate: "MAM-{episode_number}-{title}",
   autoIncrementEpisode: true,
   defaultTags: [],
@@ -50,6 +53,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     set({ outputDirectory: dir, extractedAudioDirectory: dir }),
   setClaudeApiKey: (key) => set({ claudeApiKey: key }),
   setAiEnhancementApiKey: (key) => set({ aiEnhancementApiKey: key }),
+  setRemoveBgApiKey: (key) => set({ removeBgApiKey: key }),
   setFileNamingTemplate: (template) => set({ fileNamingTemplate: template }),
   setAutoIncrementEpisode: (auto) => set({ autoIncrementEpisode: auto }),
   setDefaultTags: (tags) => set({ defaultTags: tags }),
@@ -63,6 +67,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
         settings.extractedAudioDirectory || settings.outputDirectory || "",
       claudeApiKey: settings.claudeApiKey || "",
       aiEnhancementApiKey: settings.aiEnhancementApiKey || "",
+      removeBgApiKey: settings.removeBgApiKey || "",
       fileNamingTemplate:
         settings.fileNamingTemplate || "MAM-{episode_number}-{title}",
       autoIncrementEpisode: settings.autoIncrementEpisode !== "false",
