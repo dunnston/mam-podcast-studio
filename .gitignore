@@ -24,3 +24,9 @@ src-tauri/gen/
 
 # FFmpeg sidecar binaries (too large for git, copy manually)
 src-tauri/binaries/*.exe
+
+# Test output files
+src-tauri/*.mp4
+src-tauri/*.mp3
+src-tauri/*.m4a
+src-tauri/*.wav

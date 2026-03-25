@@ -16,6 +16,7 @@ import {
   readTranscript,
   openTranscriptFile,
 } from "../../lib/tauri";
+import { saveShowNotes } from "../../lib/database";
 import type { GenerationResult } from "../../lib/tauri";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { Button } from "../../components/ui/Button";
@@ -45,6 +46,7 @@ function estimateCost(charCount: number): { tokens: number; cost: string } {
 
 export function ShowNotesStep() {
   const {
+    currentEpisode,
     showNotesContent,
     showNotesEdited,
     setShowNotesContent,
@@ -102,6 +104,20 @@ export function ShowNotesStep() {
       setGenerationResult(result);
       setShowNotesContent(result.content);
       setShowNotesEdited(result.content);
+
+      // Save to database
+      if (currentEpisode?.id) {
+        try {
+          await saveShowNotes({
+            episode_id: currentEpisode.id,
+            transcript_path: transcriptPath || undefined,
+            generated_content: result.content,
+            tokens_used: result.input_tokens + result.output_tokens,
+          });
+        } catch (e) {
+          console.error("Failed to save show notes to DB:", e);
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Generation failed.");
     } finally {

@@ -125,7 +125,9 @@ export function Settings() {
   const store = useSettingsStore();
 
   // Local state that mirrors settings (to allow "save" semantics)
-  const [outputDir, setOutputDir] = useState(store.outputDirectory);
+  const [enhancedVideoDir, setEnhancedVideoDir] = useState(store.enhancedVideoDirectory);
+  const [extractedAudioDir, setExtractedAudioDir] = useState(store.extractedAudioDirectory);
+  const [showNotesDir, setShowNotesDir] = useState(store.showNotesDirectory);
   const [namingTemplate, setNamingTemplate] = useState(store.fileNamingTemplate);
   const [autoIncrement, setAutoIncrement] = useState(store.autoIncrementEpisode);
   const [claudeKey, setClaudeKey] = useState(store.claudeApiKey);
@@ -142,7 +144,9 @@ export function Settings() {
   useEffect(() => {
     getAllSettings().then((settings) => {
       store.loadSettings(settings);
-      setOutputDir(settings.outputDirectory || "");
+      setEnhancedVideoDir(settings.enhancedVideoDirectory || "");
+      setExtractedAudioDir(settings.extractedAudioDirectory || settings.outputDirectory || "");
+      setShowNotesDir(settings.showNotesDirectory || "");
       setNamingTemplate(settings.fileNamingTemplate || "MAM-{episode_number}-{title}");
       setAutoIncrement(settings.autoIncrementEpisode !== "false");
       setClaudeKey(settings.claudeApiKey || "");
@@ -156,12 +160,16 @@ export function Settings() {
     setTimeout(() => setSaved((prev) => ({ ...prev, [key]: false })), 2000);
   };
 
-  const handleSelectOutputDir = async () => {
+  const handleSelectDir = async (
+    setter: (dir: string) => void,
+    storeSetter: (dir: string) => void,
+    settingKey: string
+  ) => {
     const dir = await selectOutputDirectory();
     if (dir) {
-      setOutputDir(dir);
-      store.setOutputDirectory(dir);
-      await saveSetting("outputDirectory", dir);
+      setter(dir);
+      storeSetter(dir);
+      await saveSetting(settingKey, dir);
     }
   };
 
@@ -243,49 +251,76 @@ export function Settings() {
       {/* Tab: General */}
       <TabPanel id="general" activeTab={activeTab}>
         <div style={sectionStyle}>
-          {/* Output directory */}
-          <div style={settingRowStyle}>
-            <p style={labelStyle}>Output Directory</p>
-            <p style={descStyle}>
-              Where your extracted audio files and enhanced videos will be saved.
-            </p>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "10px",
-                padding: "10px 14px",
-                backgroundColor: "var(--color-surface)",
-                border: "1px solid var(--color-border)",
-                borderRadius: "10px",
-              }}
-            >
-              <FolderOpen
-                size={16}
-                style={{ color: "var(--color-text-muted)", flexShrink: 0 }}
-              />
-              <span
+          {/* Output directories */}
+          {[
+            {
+              key: "enhancedVideoDirectory",
+              label: "Enhanced Video Output",
+              description: "Where your enhanced video files (with processed audio) will be saved.",
+              value: enhancedVideoDir,
+              setter: setEnhancedVideoDir,
+              storeSetter: store.setEnhancedVideoDirectory,
+            },
+            {
+              key: "extractedAudioDirectory",
+              label: "Extracted Audio Output",
+              description: "Where your exported audio files (MP3, M4A, WAV) will be saved.",
+              value: extractedAudioDir,
+              setter: setExtractedAudioDir,
+              storeSetter: store.setExtractedAudioDirectory,
+            },
+            {
+              key: "showNotesDirectory",
+              label: "Show Notes Output",
+              description: "Where your exported show notes files will be saved.",
+              value: showNotesDir,
+              setter: setShowNotesDir,
+              storeSetter: store.setShowNotesDirectory,
+            },
+          ].map((dirConfig) => (
+            <div key={dirConfig.key} style={settingRowStyle}>
+              <p style={labelStyle}>{dirConfig.label}</p>
+              <p style={descStyle}>{dirConfig.description}</p>
+              <div
                 style={{
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "13px",
-                  color: outputDir ? "var(--color-cream)" : "var(--color-text-muted)",
-                  flex: 1,
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
+                  padding: "10px 14px",
+                  backgroundColor: "var(--color-surface)",
+                  border: `1px solid ${dirConfig.value ? "var(--color-border)" : "rgba(196, 116, 90, 0.4)"}`,
+                  borderRadius: "10px",
                 }}
               >
-                {outputDir || "No directory selected"}
-              </span>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={handleSelectOutputDir}
-              >
-                Browse
-              </Button>
+                <FolderOpen
+                  size={16}
+                  style={{ color: dirConfig.value ? "var(--color-text-muted)" : "var(--color-terracotta)", flexShrink: 0 }}
+                />
+                <span
+                  style={{
+                    fontFamily: "var(--font-mono)",
+                    fontSize: "13px",
+                    color: dirConfig.value ? "var(--color-cream)" : "var(--color-terracotta)",
+                    flex: 1,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {dirConfig.value || "Not set — please select a folder"}
+                </span>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() =>
+                    handleSelectDir(dirConfig.setter, dirConfig.storeSetter, dirConfig.key)
+                  }
+                >
+                  Browse
+                </Button>
+              </div>
             </div>
-          </div>
+          ))}
 
           {/* File naming template */}
           <div style={settingRowStyle}>

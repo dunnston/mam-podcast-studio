@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { useEpisodeStore } from "../../stores/episodeStore";
 import { openVideoFile, probeVideo } from "../../lib/tauri";
-import { getNextEpisodeNumber } from "../../lib/database";
+import { getNextEpisodeNumber, createEpisode } from "../../lib/database";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
 import { Card } from "../../components/ui/Card";
@@ -107,10 +107,10 @@ export function ImportStep() {
     }
   };
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (!videoInfo || !filePath) return;
 
-    setCurrentEpisode({
+    const episodeData = {
       title: title || "Untitled Episode",
       episode_number: episodeNumber ? parseInt(episodeNumber, 10) : undefined,
       recording_date: recordingDate || undefined,
@@ -121,10 +121,20 @@ export function ImportStep() {
         ? tags.split(",").map((s) => s.trim()).filter(Boolean)
         : undefined,
       original_video_path: filePath,
-      status: "draft",
-    });
+      status: "draft" as const,
+    };
 
-    setCurrentStep("enhance");
+    try {
+      // Save to SQLite database
+      const episodeId = await createEpisode(episodeData);
+      setCurrentEpisode({ ...episodeData, id: episodeId });
+      setCurrentStep("enhance");
+    } catch (err) {
+      // If save fails, still allow continuing with in-memory state
+      console.error("Failed to save episode to database:", err);
+      setCurrentEpisode(episodeData);
+      setCurrentStep("enhance");
+    }
   };
 
   const hasFile = Boolean(videoInfo && filePath);

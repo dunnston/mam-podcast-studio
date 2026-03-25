@@ -1,13 +1,27 @@
 import { create } from "zustand";
 
 interface SettingsState {
-  outputDirectory: string;
+  // Output directories
+  enhancedVideoDirectory: string;
+  extractedAudioDirectory: string;
+  showNotesDirectory: string;
+
+  // API keys
   claudeApiKey: string;
   aiEnhancementApiKey: string;
+
+  // Preferences
   fileNamingTemplate: string;
   autoIncrementEpisode: boolean;
   defaultTags: string[];
 
+  // Legacy alias (maps to extractedAudioDirectory)
+  outputDirectory: string;
+
+  // Actions
+  setEnhancedVideoDirectory: (dir: string) => void;
+  setExtractedAudioDirectory: (dir: string) => void;
+  setShowNotesDirectory: (dir: string) => void;
   setOutputDirectory: (dir: string) => void;
   setClaudeApiKey: (key: string) => void;
   setAiEnhancementApiKey: (key: string) => void;
@@ -18,14 +32,22 @@ interface SettingsState {
 }
 
 export const useSettingsStore = create<SettingsState>((set) => ({
-  outputDirectory: "",
+  enhancedVideoDirectory: "",
+  extractedAudioDirectory: "",
+  showNotesDirectory: "",
   claudeApiKey: "",
   aiEnhancementApiKey: "",
   fileNamingTemplate: "MAM-{episode_number}-{title}",
   autoIncrementEpisode: true,
   defaultTags: [],
+  outputDirectory: "", // legacy alias
 
-  setOutputDirectory: (dir) => set({ outputDirectory: dir }),
+  setEnhancedVideoDirectory: (dir) => set({ enhancedVideoDirectory: dir }),
+  setExtractedAudioDirectory: (dir) =>
+    set({ extractedAudioDirectory: dir, outputDirectory: dir }),
+  setShowNotesDirectory: (dir) => set({ showNotesDirectory: dir }),
+  setOutputDirectory: (dir) =>
+    set({ outputDirectory: dir, extractedAudioDirectory: dir }),
   setClaudeApiKey: (key) => set({ claudeApiKey: key }),
   setAiEnhancementApiKey: (key) => set({ aiEnhancementApiKey: key }),
   setFileNamingTemplate: (template) => set({ fileNamingTemplate: template }),
@@ -33,7 +55,12 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setDefaultTags: (tags) => set({ defaultTags: tags }),
   loadSettings: (settings) =>
     set({
-      outputDirectory: settings.outputDirectory || "",
+      enhancedVideoDirectory: settings.enhancedVideoDirectory || "",
+      extractedAudioDirectory:
+        settings.extractedAudioDirectory || settings.outputDirectory || "",
+      showNotesDirectory: settings.showNotesDirectory || "",
+      outputDirectory:
+        settings.extractedAudioDirectory || settings.outputDirectory || "",
       claudeApiKey: settings.claudeApiKey || "",
       aiEnhancementApiKey: settings.aiEnhancementApiKey || "",
       fileNamingTemplate:

@@ -8,6 +8,7 @@ import {
   Zap,
   Wind,
   Layers,
+  FolderOpen,
 } from "lucide-react";
 import { useEpisodeStore } from "../../stores/episodeStore";
 import {
@@ -15,6 +16,7 @@ import {
   cancelProcessing,
   onEnhancementProgress,
 } from "../../lib/tauri";
+import { updateEpisode } from "../../lib/database";
 import type { ProcessingProgress } from "../../lib/tauri";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { Button } from "../../components/ui/Button";
@@ -68,6 +70,7 @@ export function EnhanceStep() {
     enhancementPreset,
     setEnhancementPreset,
     setCurrentStep,
+    setCurrentEpisode,
     isProcessing,
     processingProgress,
     processingEta,
@@ -75,7 +78,7 @@ export function EnhanceStep() {
     setProgress,
   } = useEpisodeStore();
 
-  const { outputDirectory } = useSettingsStore();
+  const { enhancedVideoDirectory } = useSettingsStore();
   const [method, setMethod] = useState<"ffmpeg" | "ai">("ffmpeg");
   const [progressDetail, setProgressDetail] = useState<ProcessingProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -103,9 +106,12 @@ export function EnhanceStep() {
     if (!currentEpisode?.original_video_path || !videoInfo) return;
 
     const inputPath = currentEpisode.original_video_path;
-    const dir = outputDirectory || ".";
-    const episodeName = `MAM-${currentEpisode.episode_number || "episode"}-enhanced`;
-    const outputPath = `${dir}/${episodeName}.mp4`;
+    if (!enhancedVideoDirectory) {
+      setError("Please set an Enhanced Video output directory in Settings → General first.");
+      return;
+    }
+    const episodeName = `MAM-EP${currentEpisode.episode_number || "XX"}-${(currentEpisode.title || "episode").replace(/[^a-zA-Z0-9]/g, "-").slice(0, 40)}-enhanced`;
+    const outputPath = `${enhancedVideoDirectory}/${episodeName}.mp4`;
 
     setError(null);
     setProcessing(true);
@@ -120,6 +126,22 @@ export function EnhanceStep() {
       );
       setEnhancedPath(result);
       setCompleted(true);
+      // Update episode in DB with enhanced video path
+      if (currentEpisode?.id) {
+        try {
+          await updateEpisode(currentEpisode.id, {
+            enhanced_video_path: result,
+            status: "enhanced",
+          });
+          setCurrentEpisode({
+            ...currentEpisode,
+            enhanced_video_path: result,
+            status: "enhanced",
+          });
+        } catch (e) {
+          console.error("Failed to update episode in DB:", e);
+        }
+      }
     } catch (err) {
       if (err instanceof Error && err.message.includes("cancelled")) {
         setError(null);
@@ -535,6 +557,47 @@ export function EnhanceStep() {
               </p>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Output directory notice */}
+      {enhancedVideoDirectory && !isProcessing && !completed && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            padding: "10px 14px",
+            backgroundColor: "var(--color-surface)",
+            border: "1px solid var(--color-border)",
+            borderRadius: "8px",
+          }}
+        >
+          <FolderOpen size={14} style={{ color: "var(--color-text-muted)", flexShrink: 0 }} />
+          <span style={{ fontFamily: "var(--font-body)", fontSize: "12px", color: "var(--color-text-muted)" }}>
+            Output:{" "}
+            <span style={{ fontFamily: "var(--font-mono)", color: "var(--color-cream)" }}>
+              {enhancedVideoDirectory}
+            </span>
+          </span>
+        </div>
+      )}
+
+      {!enhancedVideoDirectory && !isProcessing && !completed && (
+        <div
+          style={{
+            padding: "12px 16px",
+            backgroundColor: "rgba(196, 116, 90, 0.1)",
+            border: "1px solid rgba(196, 116, 90, 0.25)",
+            borderRadius: "8px",
+            fontFamily: "var(--font-body)",
+            fontSize: "13px",
+            color: "var(--color-terracotta)",
+          }}
+        >
+          No output directory set. Go to{" "}
+          <span style={{ textDecoration: "underline" }}>Settings → General</span>{" "}
+          to set the Enhanced Video output folder.
         </div>
       )}
 

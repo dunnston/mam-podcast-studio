@@ -12,6 +12,7 @@ import {
   onExtractionProgress,
   selectOutputDirectory,
 } from "../../lib/tauri";
+import { updateEpisode, createAudioExport } from "../../lib/database";
 import type { ExtractionResult } from "../../lib/tauri";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { Button } from "../../components/ui/Button";
@@ -60,7 +61,7 @@ export function ExtractStep() {
     setCurrentStep,
   } = useEpisodeStore();
 
-  const { outputDirectory, setOutputDirectory } = useSettingsStore();
+  const { extractedAudioDirectory, setExtractedAudioDirectory } = useSettingsStore();
   const [isExtracting, setIsExtracting] = useState(false);
   const [formatStatuses, setFormatStatuses] = useState<
     Record<string, "pending" | "processing" | "done" | "error">
@@ -97,7 +98,12 @@ export function ExtractStep() {
 
   const handleSelectDirectory = async () => {
     const dir = await selectOutputDirectory();
-    if (dir) setOutputDirectory(dir);
+    if (dir) {
+      setExtractedAudioDirectory(dir);
+      // Also persist to database
+      const { setSetting } = await import("../../lib/database");
+      await setSetting("extractedAudioDirectory", dir);
+    }
   };
 
   const handleExtract = async () => {
@@ -105,7 +111,11 @@ export function ExtractStep() {
 
     const inputPath =
       currentEpisode.enhanced_video_path || currentEpisode.original_video_path;
-    const dir = outputDirectory || ".";
+    if (!extractedAudioDirectory) {
+      setError("Please select an output directory first.");
+      return;
+    }
+    const dir = extractedAudioDirectory;
 
     // Reset state
     setError(null);
@@ -133,6 +143,24 @@ export function ExtractStep() {
 
       setResults(extracted);
       setCompleted(true);
+
+      // Save audio exports to DB
+      if (currentEpisode?.id) {
+        try {
+          for (const exp of extracted) {
+            await createAudioExport({
+              episode_id: currentEpisode.id,
+              format: exp.format,
+              file_path: exp.file_path,
+              bitrate: exp.format === "mp3" ? 320 : exp.format === "m4a" ? 192 : undefined,
+              file_size_bytes: exp.file_size_bytes,
+            });
+          }
+          await updateEpisode(currentEpisode.id, { status: "extracted" });
+        } catch (e) {
+          console.error("Failed to save exports to DB:", e);
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Extraction failed.");
     } finally {
@@ -164,7 +192,7 @@ export function ExtractStep() {
             gap: "10px",
             padding: "10px 14px",
             backgroundColor: "var(--color-surface)",
-            border: "1px solid var(--color-border)",
+            border: `1px solid ${extractedAudioDirectory ? "var(--color-border)" : "rgba(196, 116, 90, 0.4)"}`,
             borderRadius: "10px",
           }}
         >
@@ -176,14 +204,14 @@ export function ExtractStep() {
             style={{
               fontFamily: "var(--font-mono)",
               fontSize: "13px",
-              color: outputDirectory ? "var(--color-cream)" : "var(--color-text-muted)",
+              color: extractedAudioDirectory ? "var(--color-cream)" : "var(--color-terracotta)",
               flex: 1,
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
             }}
           >
-            {outputDirectory || "No directory selected"}
+            {extractedAudioDirectory || "No directory selected — click Browse"}
           </span>
           <Button
             variant="secondary"
