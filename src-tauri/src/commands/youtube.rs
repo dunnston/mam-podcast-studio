@@ -1,0 +1,237 @@
+use crate::youtube::{YouTubeClient, YouTubeProgress};
+use std::io::{Read, Write};
+use std::net::TcpListener;
+use tauri::{AppHandle, Emitter};
+
+// ─── OAuth flow ──────────────────────────────────────────────────
+
+/// Start the YouTube OAuth flow: opens browser, listens for callback,
+/// exchanges code for tokens, returns the token response.
+#[tauri::command]
+pub async fn youtube_oauth_start(
+    client_id: String,
+    client_secret: String,
+) -> Result<serde_json::Value, String> {
+    let client = YouTubeClient::new(&client_id, &client_secret);
+
+    // Bind to a random available port on loopback
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .map_err(|e| format!("Failed to bind loopback listener: {}", e))?;
+    let port = listener
+        .local_addr()
+        .map_err(|e| format!("Failed to get listener address: {}", e))?
+        .port();
+
+    eprintln!("[YouTube] OAuth listener on port {}", port);
+
+    // Build auth URL and open in browser
+    let auth_url = client.build_auth_url(port);
+    eprintln!("[YouTube] Opening auth URL: {}", auth_url);
+
+    open::that(&auth_url)
+        .map_err(|e| format!("Failed to open browser: {}", e))?;
+
+    // Wait for the callback (blocking, with timeout)
+    listener
+        .set_nonblocking(false)
+        .map_err(|e| format!("Failed to set blocking mode: {}", e))?;
+
+    // Set a 2-minute timeout for the user to complete consent
+    let timeout = std::time::Duration::from_secs(120);
+    listener
+        .set_nonblocking(false)
+        .ok();
+
+    let code = tokio::task::spawn_blocking(move || -> Result<String, String> {
+        // Use a timeout via setting SO_RCVTIMEO isn't portable, so we use
+        // non-blocking with polling
+        listener.set_nonblocking(true).ok();
+        let start = std::time::Instant::now();
+
+        loop {
+            match listener.accept() {
+                Ok((mut stream, _)) => {
+                    // Read the HTTP request
+                    let mut buf = [0u8; 4096];
+                    let n = stream.read(&mut buf).unwrap_or(0);
+                    let request = String::from_utf8_lossy(&buf[..n]).to_string();
+
+                    // Extract the authorization code from the query string
+                    let code = extract_code_from_request(&request);
+
+                    // Send a response to the browser
+                    let (status, body) = if code.is_some() {
+                        ("200 OK", "<html><body><h2>Authorization successful!</h2><p>You can close this tab and return to MAM Podcast Studio.</p></body></html>")
+                    } else {
+                        ("400 Bad Request", "<html><body><h2>Authorization failed</h2><p>No authorization code received. Please try again.</p></body></html>")
+                    };
+
+                    let response = format!(
+                        "HTTP/1.1 {}\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n{}",
+                        status, body
+                    );
+                    let _ = stream.write_all(response.as_bytes());
+                    let _ = stream.flush();
+                    drop(stream);
+
+                    return code.ok_or_else(|| "No authorization code in callback".to_string());
+                }
+                Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    if start.elapsed() > timeout {
+                        return Err("OAuth timeout: user did not complete authorization within 2 minutes".to_string());
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(200));
+                }
+                Err(e) => {
+                    return Err(format!("Listener error: {}", e));
+                }
+            }
+        }
+    })
+    .await
+    .map_err(|e| format!("OAuth task error: {}", e))?
+    .map_err(|e| e)?;
+
+    eprintln!("[YouTube] Got authorization code, exchanging for tokens...");
+
+    // Exchange code for tokens
+    let token = client
+        .exchange_code(&code, port)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    eprintln!("[YouTube] Got tokens, refresh_token present: {}", token.refresh_token.is_some());
+
+    serde_json::to_value(&token).map_err(|e| e.to_string())
+}
+
+/// Refresh an expired access token
+#[tauri::command]
+pub async fn youtube_refresh_token(
+    client_id: String,
+    client_secret: String,
+    refresh_token: String,
+) -> Result<serde_json::Value, String> {
+    let client = YouTubeClient::new(&client_id, &client_secret);
+    let token = client
+        .refresh_access_token(&refresh_token)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    serde_json::to_value(&token).map_err(|e| e.to_string())
+}
+
+// ─── Upload ──────────────────────────────────────────────────────
+
+#[derive(serde::Deserialize, Debug)]
+pub struct YouTubeUploadRequest {
+    pub client_id: String,
+    pub client_secret: String,
+    pub refresh_token: String,
+    pub video_path: String,
+    pub title: String,
+    pub description: String,
+    pub tags: Option<Vec<String>>,
+    pub privacy_status: Option<String>, // "public", "private", "unlisted"
+    pub category_id: Option<String>,
+    pub thumbnail_path: Option<String>,
+}
+
+#[derive(serde::Serialize, Debug)]
+pub struct YouTubeUploadResult {
+    pub video_id: Option<String>,
+    pub channel_id: Option<String>,
+    pub upload_status: Option<String>,
+}
+
+#[tauri::command]
+pub async fn youtube_upload(
+    app: AppHandle,
+    request: YouTubeUploadRequest,
+) -> Result<YouTubeUploadResult, String> {
+    eprintln!("[YouTube] Starting upload for: {}", request.title);
+
+    let client = YouTubeClient::new(&request.client_id, &request.client_secret);
+
+    // Refresh the access token first
+    let _ = app.emit("youtube-progress", &YouTubeProgress {
+        stage: "auth".to_string(),
+        message: "Refreshing access token...".to_string(),
+        percent: 2.0,
+    });
+
+    let token = client
+        .refresh_access_token(&request.refresh_token)
+        .await
+        .map_err(|e| format!("Failed to refresh YouTube token: {}. You may need to re-authorize in Settings.", e))?;
+
+    let video_path = std::path::PathBuf::from(&request.video_path);
+    let thumbnail_path = request.thumbnail_path.as_ref().map(std::path::PathBuf::from);
+
+    let app_clone = app.clone();
+    let result = client
+        .upload(
+            &token.access_token,
+            &video_path,
+            &request.title,
+            &request.description,
+            request.tags.unwrap_or_default(),
+            request.privacy_status.as_deref().unwrap_or("private"),
+            request.category_id.as_deref().unwrap_or("22"), // "People & Blogs"
+            thumbnail_path.as_deref(),
+            move |progress: YouTubeProgress| {
+                let _ = app_clone.emit("youtube-progress", &progress);
+            },
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let upload_result = YouTubeUploadResult {
+        video_id: result.id,
+        channel_id: result.snippet.and_then(|s| s.channel_id),
+        upload_status: result.status.and_then(|s| s.upload_status),
+    };
+
+    Ok(upload_result)
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────
+
+/// Extract the `code` query parameter from an HTTP GET request
+fn extract_code_from_request(request: &str) -> Option<String> {
+    // Parse "GET /?code=XXXX&scope=... HTTP/1.1"
+    let first_line = request.lines().next()?;
+    let path = first_line.split_whitespace().nth(1)?;
+    let query = path.split('?').nth(1)?;
+
+    for param in query.split('&') {
+        let mut parts = param.splitn(2, '=');
+        if let (Some(key), Some(value)) = (parts.next(), parts.next()) {
+            if key == "code" {
+                // URL-decode the value
+                return Some(url_decode(value));
+            }
+        }
+    }
+
+    None
+}
+
+/// Simple URL decode
+fn url_decode(input: &str) -> String {
+    let mut result = String::new();
+    let mut chars = input.chars();
+    while let Some(c) = chars.next() {
+        if c == '%' {
+            let hex: String = chars.by_ref().take(2).collect();
+            if let Ok(byte) = u8::from_str_radix(&hex, 16) {
+                result.push(byte as char);
+            }
+        } else if c == '+' {
+            result.push(' ');
+        } else {
+            result.push(c);
+        }
+    }
+    result
+}

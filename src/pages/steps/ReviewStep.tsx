@@ -1,4 +1,3 @@
-import { useNavigate } from "react-router-dom";
 import {
   CheckCircle2,
   Circle,
@@ -8,8 +7,6 @@ import {
   FileText,
   Image as ImageIcon,
   FolderOpen,
-  PlusCircle,
-  Library,
   ArrowRight,
 } from "lucide-react";
 import { useEpisodeStore } from "../../stores/episodeStore";
@@ -109,7 +106,6 @@ function DataRow({ label, value }: { label: string; value?: string | number | nu
 }
 
 export function ReviewStep() {
-  const navigate = useNavigate();
   const {
     currentEpisode,
     videoInfo,
@@ -119,7 +115,7 @@ export function ReviewStep() {
     showNotesEdited,
     thumbnailConfig,
     thumbnailExportedPath,
-    resetWizard,
+    setCurrentStep,
   } = useEpisodeStore();
 
   const hasImport = Boolean(currentEpisode?.original_video_path && videoInfo);
@@ -132,11 +128,6 @@ export function ReviewStep() {
   const wordCount = notesContent
     ? notesContent.trim().split(/\s+/).filter(Boolean).length
     : 0;
-
-  const handleStartNew = () => {
-    resetWizard();
-    navigate("/new-episode");
-  };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
@@ -454,40 +445,14 @@ export function ReviewStep() {
         style={{
           display: "flex",
           alignItems: "center",
-          justifyContent: "space-between",
+          justifyContent: "flex-end",
           paddingTop: "8px",
           borderTop: "1px solid var(--color-border)",
           marginTop: "8px",
         }}
       >
         <button
-          onClick={() => navigate("/library")}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "6px",
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            fontFamily: "var(--font-body)",
-            fontSize: "14px",
-            color: "var(--color-sage)",
-            transition: "color 150ms ease",
-          }}
-          onMouseEnter={(e) =>
-            ((e.currentTarget as HTMLButtonElement).style.color =
-              "var(--color-sage-light)")
-          }
-          onMouseLeave={(e) =>
-            ((e.currentTarget as HTMLButtonElement).style.color =
-              "var(--color-sage)")
-          }
-        >
-          <Library size={15} />
-          Go to Library
-        </button>
-        <button
-          onClick={handleStartNew}
+          onClick={() => setCurrentStep("publish")}
           style={{
             display: "flex",
             alignItems: "center",
@@ -512,8 +477,7 @@ export function ReviewStep() {
               "var(--color-terracotta)")
           }
         >
-          <PlusCircle size={15} />
-          Start New Episode
+          Continue to Publish
           <ArrowRight size={14} />
         </button>
       </div>

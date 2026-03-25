@@ -13,7 +13,8 @@ export type WizardStep =
   | "extract"
   | "show-notes"
   | "thumbnail"
-  | "review";
+  | "review"
+  | "publish";
 
 export interface Episode {
   id?: number;
@@ -60,6 +61,7 @@ interface EpisodeState {
   selectedFormats: string[];
   showNotesContent: string;
   showNotesEdited: string;
+  cleanvoiceTranscript: string;
 
   // Thumbnail state
   thumbnailConfig: ThumbnailConfig | null;
@@ -69,6 +71,9 @@ interface EpisodeState {
   isProcessing: boolean;
   processingProgress: number;
   processingEta: string;
+
+  // Session tracking — incremented on reset to invalidate in-flight async work
+  wizardSessionId: number;
 
   // Actions
   setCurrentStep: (step: WizardStep) => void;
@@ -80,6 +85,7 @@ interface EpisodeState {
   setShowNotesEdited: (content: string) => void;
   setThumbnailConfig: (config: ThumbnailConfig | null) => void;
   setThumbnailExportedPath: (path: string | null) => void;
+  setCleanvoiceTranscript: (transcript: string) => void;
   setProcessing: (processing: boolean) => void;
   setProgress: (progress: number, eta?: string) => void;
   resetWizard: () => void;
@@ -96,9 +102,11 @@ const initialState = {
   showNotesEdited: "",
   thumbnailConfig: null as ThumbnailConfig | null,
   thumbnailExportedPath: null as string | null,
+  cleanvoiceTranscript: "",
   isProcessing: false,
   processingProgress: 0,
   processingEta: "",
+  wizardSessionId: 0,
 };
 
 export const useEpisodeStore = create<EpisodeState>((set) => ({
@@ -113,10 +121,11 @@ export const useEpisodeStore = create<EpisodeState>((set) => ({
   setShowNotesEdited: (content) => set({ showNotesEdited: content }),
   setThumbnailConfig: (config) => set({ thumbnailConfig: config }),
   setThumbnailExportedPath: (path) => set({ thumbnailExportedPath: path }),
+  setCleanvoiceTranscript: (transcript) => set({ cleanvoiceTranscript: transcript }),
   setProcessing: (processing) => set({ isProcessing: processing }),
   setProgress: (progress, eta) =>
     set({ processingProgress: progress, processingEta: eta || "" }),
-  resetWizard: () => set(initialState),
+  resetWizard: () => set((state) => ({ ...initialState, wizardSessionId: state.wizardSessionId + 1 })),
   loadEpisode: (episode, showNotes) => {
     // Determine which step to resume at based on episode status
     let step: WizardStep = "import";
@@ -130,7 +139,7 @@ export const useEpisodeStore = create<EpisodeState>((set) => ({
       step = "show-notes";
     }
     if (episode.status === "published") {
-      step = "review";
+      step = "publish";
     }
 
     set({
@@ -150,6 +159,7 @@ export const useEpisodeStore = create<EpisodeState>((set) => ({
         : null,
       showNotesContent: showNotes || "",
       showNotesEdited: showNotes || "",
+      cleanvoiceTranscript: "",
       isProcessing: false,
       processingProgress: 0,
       processingEta: "",

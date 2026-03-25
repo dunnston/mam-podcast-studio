@@ -19,6 +19,7 @@ import {
   cleanvoiceEnhance,
   cleanvoiceCancel,
   onCleanvoiceProgress,
+  onCleanvoiceTranscript,
 } from "../../lib/tauri";
 import { updateEpisode } from "../../lib/database";
 import type { ProcessingProgress } from "../../lib/tauri";
@@ -141,11 +142,13 @@ export function EnhanceStep() {
     setEnhancementPreset,
     setCurrentStep,
     setCurrentEpisode,
+    setCleanvoiceTranscript,
     isProcessing,
     processingProgress,
     processingEta,
     setProcessing,
     setProgress,
+    wizardSessionId,
   } = useEpisodeStore();
 
   const { enhancedVideoDirectory, aiEnhancementApiKey } = useSettingsStore();
@@ -167,6 +170,7 @@ export function EnhanceStep() {
 
   const unlistenFfmpegRef = useRef<(() => void) | null>(null);
   const unlistenCvRef = useRef<(() => void) | null>(null);
+  const unlistenTranscriptRef = useRef<(() => void) | null>(null);
 
   // If episode already enhanced, show completed state
   useEffect(() => {
@@ -208,6 +212,21 @@ export function EnhanceStep() {
     };
   }, [setProgress]);
 
+  // Subscribe to Cleanvoice transcript event
+  useEffect(() => {
+    let active = true;
+    onCleanvoiceTranscript((transcript) => {
+      if (!active) return;
+      setCleanvoiceTranscript(transcript);
+    }).then((unlisten) => {
+      unlistenTranscriptRef.current = unlisten;
+    });
+    return () => {
+      active = false;
+      unlistenTranscriptRef.current?.();
+    };
+  }, [setCleanvoiceTranscript]);
+
   // ─── Helpers ──────────────────────────────────────────────────
   const buildEpisodeName = () => {
     const epNum = currentEpisode?.episode_number || "XX";
@@ -241,6 +260,10 @@ export function EnhanceStep() {
       return;
     }
 
+    // Capture session ID so we can detect if the wizard was reset mid-flight
+    const sessionId = wizardSessionId;
+    const isStale = () => useEpisodeStore.getState().wizardSessionId !== sessionId;
+
     setError(null);
     setProcessing(true);
     setProgress(0);
@@ -264,7 +287,7 @@ export function EnhanceStep() {
         // Determine output: if editing, Cleanvoice returns video; if enhance-only, returns audio
         const cvOutputPath = isEditing
           ? `${enhancedVideoDirectory}/${episodeName}-cv-enhanced.mp4`
-          : `${enhancedVideoDirectory}/${episodeName}-cv-enhanced.aac`;
+          : `${enhancedVideoDirectory}/${episodeName}-cv-enhanced.m4a`;
 
         const cleanResult = await cleanvoiceEnhance({
           api_key: aiEnhancementApiKey,
@@ -307,6 +330,9 @@ export function EnhanceStep() {
         setEnhancedPath(audioForMastering);
       }
 
+      // Bail if the wizard was reset while we were processing
+      if (isStale()) return;
+
       const outputPath = enhancedPath || finalOutputPath;
       setEnhancedPath(outputPath);
       setCompleted(true);
@@ -318,11 +344,13 @@ export function EnhanceStep() {
             enhanced_video_path: outputPath,
             status: "enhanced",
           });
-          setCurrentEpisode({
-            ...currentEpisode,
-            enhanced_video_path: outputPath,
-            status: "enhanced",
-          });
+          if (!isStale()) {
+            setCurrentEpisode({
+              ...currentEpisode,
+              enhanced_video_path: outputPath,
+              status: "enhanced",
+            });
+          }
         } catch (e) {
           console.error("Failed to update episode in DB:", e);
         }
@@ -334,8 +362,10 @@ export function EnhanceStep() {
         setError(err instanceof Error ? err.message : String(err));
       }
     } finally {
-      setProcessing(false);
-      setProgress(0);
+      if (!isStale()) {
+        setProcessing(false);
+        setProgress(0);
+      }
       setCurrentStage("idle");
     }
   };

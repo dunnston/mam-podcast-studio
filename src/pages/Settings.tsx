@@ -14,6 +14,8 @@ import { getAllSettings, setSetting } from "../lib/database";
 import {
   testClaudeApi,
   testCleanvoiceApi,
+  testPodbeanApi,
+  youtubeOAuthStart,
   selectOutputDirectory,
 } from "../lib/tauri";
 import { Tabs, TabPanel } from "../components/ui/Tabs";
@@ -134,6 +136,10 @@ export function Settings() {
   const [claudeKey, setClaudeKey] = useState(store.claudeApiKey);
   const [cleanvoiceKey, setCleanvoiceKey] = useState(store.aiEnhancementApiKey);
   const [removeBgKey, setRemoveBgKey] = useState(store.removeBgApiKey);
+  const [podbeanClientId, setPodbeanClientId] = useState(store.podbeanClientId);
+  const [podbeanClientSecret, setPodbeanClientSecret] = useState(store.podbeanClientSecret);
+  const [youtubeClientId, setYoutubeClientId] = useState(store.youtubeClientId);
+  const [youtubeClientSecret, setYoutubeClientSecret] = useState(store.youtubeClientSecret);
   const [showNotesTemplate, setShowNotesTemplate] = useState(DEFAULT_TEMPLATE);
 
   // API test state
@@ -142,6 +148,12 @@ export function Settings() {
   >("idle");
   const [cleanvoiceTestResult, setCleanvoiceTestResult] = useState<boolean | null>(null);
   const [cleanvoiceTestLoading, setCleanvoiceTestLoading] = useState(false);
+  const [podbeanTestResult, setPodbeanTestResult] = useState<boolean | null>(null);
+  const [podbeanTestLoading, setPodbeanTestLoading] = useState(false);
+  const [youtubeAuthStatus, setYoutubeAuthStatus] = useState<
+    "idle" | "authorizing" | "ok" | "fail"
+  >(store.youtubeRefreshToken ? "ok" : "idle");
+  const [youtubeAuthError, setYoutubeAuthError] = useState("");
 
   const [saved, setSaved] = useState<Record<string, boolean>>({});
 
@@ -157,6 +169,13 @@ export function Settings() {
       setClaudeKey(settings.claudeApiKey || "");
       setCleanvoiceKey(settings.aiEnhancementApiKey || "");
       setRemoveBgKey(settings.removeBgApiKey || "");
+      setPodbeanClientId(settings.podbeanClientId || "");
+      setPodbeanClientSecret(settings.podbeanClientSecret || "");
+      setYoutubeClientId(settings.youtubeClientId || "");
+      setYoutubeClientSecret(settings.youtubeClientSecret || "");
+      if (settings.youtubeRefreshToken) {
+        setYoutubeAuthStatus("ok");
+      }
       setShowNotesTemplate(settings.showNotesTemplate || DEFAULT_TEMPLATE);
     });
   }, []);
@@ -553,7 +572,7 @@ export function Settings() {
           </div>
 
           {/* remove.bg API Key */}
-          <div>
+          <div style={settingRowStyle}>
             <p style={labelStyle}>remove.bg API Key</p>
             <p style={descStyle}>
               For automatic background removal in thumbnail creation.{" "}
@@ -587,6 +606,189 @@ export function Settings() {
                 {saved.removeBgApiKey ? "Saved!" : "Save"}
               </Button>
             </div>
+          </div>
+
+          {/* Podbean */}
+          <div style={settingRowStyle}>
+            <p style={labelStyle}>Podbean API Credentials</p>
+            <p style={descStyle}>
+              Required for publishing episodes to Podbean. Get your credentials at{" "}
+              <a
+                href="https://developers.podbean.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: "var(--color-sage)", textDecoration: "underline" }}
+              >
+                developers.podbean.com
+              </a>
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              <div style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}>
+                <div style={{ flex: 1 }}>
+                  <p style={{ ...descStyle, marginBottom: "4px", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Client ID</p>
+                  <PasswordInput
+                    value={podbeanClientId}
+                    onChange={(e) => setPodbeanClientId(e.target.value)}
+                    placeholder="Enter your Podbean Client ID"
+                  />
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}>
+                <div style={{ flex: 1 }}>
+                  <p style={{ ...descStyle, marginBottom: "4px", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Client Secret</p>
+                  <PasswordInput
+                    value={podbeanClientSecret}
+                    onChange={(e) => setPodbeanClientSecret(e.target.value)}
+                    placeholder="Enter your Podbean Client Secret"
+                  />
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: "10px" }}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={async () => {
+                    store.setPodbeanClientId(podbeanClientId);
+                    store.setPodbeanClientSecret(podbeanClientSecret);
+                    await saveSetting("podbeanClientId", podbeanClientId);
+                    await saveSetting("podbeanClientSecret", podbeanClientSecret);
+                  }}
+                  disabled={!podbeanClientId || !podbeanClientSecret}
+                  icon={saved.podbeanClientId ? <CheckCircle2 size={13} /> : <Save size={13} />}
+                >
+                  {saved.podbeanClientId ? "Saved!" : "Save"}
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={async () => {
+                    setPodbeanTestResult(null);
+                    setPodbeanTestLoading(true);
+                    try {
+                      await testPodbeanApi(podbeanClientId, podbeanClientSecret);
+                      setPodbeanTestResult(true);
+                    } catch {
+                      setPodbeanTestResult(false);
+                    } finally {
+                      setPodbeanTestLoading(false);
+                    }
+                  }}
+                  disabled={!podbeanClientId || !podbeanClientSecret || podbeanTestLoading}
+                >
+                  {podbeanTestLoading ? "Testing..." : "Test"}
+                </Button>
+              </div>
+            </div>
+            {podbeanTestResult === true && (
+              <p style={{ ...descStyle, color: "var(--color-sage)", display: "flex", alignItems: "center", gap: "6px", marginTop: "6px" }}>
+                <CheckCircle2 size={13} /> Connected to Podbean
+              </p>
+            )}
+            {podbeanTestResult === false && (
+              <p style={{ ...descStyle, color: "#E57373", display: "flex", alignItems: "center", gap: "6px", marginTop: "6px" }}>
+                <XCircle size={13} /> Connection failed. Check your Client ID and Secret.
+              </p>
+            )}
+          </div>
+
+          {/* YouTube */}
+          <div>
+            <p style={labelStyle}>YouTube API Credentials</p>
+            <p style={descStyle}>
+              Required for publishing videos to YouTube. Set up OAuth credentials in{" "}
+              <a
+                href="https://console.cloud.google.com/apis/credentials"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: "var(--color-sage)", textDecoration: "underline" }}
+              >
+                Google Cloud Console
+              </a>
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              <div>
+                <p style={{ ...descStyle, marginBottom: "4px", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Client ID</p>
+                <PasswordInput
+                  value={youtubeClientId}
+                  onChange={(e) => setYoutubeClientId(e.target.value)}
+                  placeholder="Enter your YouTube OAuth Client ID"
+                />
+              </div>
+              <div>
+                <p style={{ ...descStyle, marginBottom: "4px", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Client Secret</p>
+                <PasswordInput
+                  value={youtubeClientSecret}
+                  onChange={(e) => setYoutubeClientSecret(e.target.value)}
+                  placeholder="Enter your YouTube OAuth Client Secret"
+                />
+              </div>
+              <div style={{ display: "flex", gap: "10px" }}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={async () => {
+                    store.setYoutubeClientId(youtubeClientId);
+                    store.setYoutubeClientSecret(youtubeClientSecret);
+                    await saveSetting("youtubeClientId", youtubeClientId);
+                    await saveSetting("youtubeClientSecret", youtubeClientSecret);
+                  }}
+                  disabled={!youtubeClientId || !youtubeClientSecret}
+                  icon={saved.youtubeClientId ? <CheckCircle2 size={13} /> : <Save size={13} />}
+                >
+                  {saved.youtubeClientId ? "Saved!" : "Save"}
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={async () => {
+                    if (!youtubeClientId || !youtubeClientSecret) return;
+                    setYoutubeAuthStatus("authorizing");
+                    setYoutubeAuthError("");
+                    try {
+                      // Save credentials first
+                      store.setYoutubeClientId(youtubeClientId);
+                      store.setYoutubeClientSecret(youtubeClientSecret);
+                      await saveSetting("youtubeClientId", youtubeClientId);
+                      await saveSetting("youtubeClientSecret", youtubeClientSecret);
+                      // Start OAuth flow (opens browser)
+                      const token = await youtubeOAuthStart(youtubeClientId, youtubeClientSecret);
+                      if (token.refresh_token) {
+                        store.setYoutubeRefreshToken(token.refresh_token);
+                        await saveSetting("youtubeRefreshToken", token.refresh_token);
+                      }
+                      setYoutubeAuthStatus("ok");
+                    } catch (err) {
+                      setYoutubeAuthStatus("fail");
+                      setYoutubeAuthError(String(err));
+                    }
+                  }}
+                  disabled={!youtubeClientId || !youtubeClientSecret || youtubeAuthStatus === "authorizing"}
+                  icon={
+                    youtubeAuthStatus === "ok" ? (
+                      <CheckCircle2 size={13} style={{ color: "var(--color-sage)" }} />
+                    ) : youtubeAuthStatus === "fail" ? (
+                      <XCircle size={13} style={{ color: "#E57373" }} />
+                    ) : undefined
+                  }
+                >
+                  {youtubeAuthStatus === "authorizing"
+                    ? "Waiting for browser..."
+                    : youtubeAuthStatus === "ok"
+                    ? "Authorized"
+                    : "Authorize YouTube"}
+                </Button>
+              </div>
+            </div>
+            {youtubeAuthStatus === "ok" && (
+              <p style={{ ...descStyle, color: "var(--color-sage)", display: "flex", alignItems: "center", gap: "6px", marginTop: "6px" }}>
+                <CheckCircle2 size={13} /> YouTube account connected
+              </p>
+            )}
+            {youtubeAuthStatus === "fail" && (
+              <p style={{ ...descStyle, color: "#E57373", display: "flex", alignItems: "center", gap: "6px", marginTop: "6px" }}>
+                <XCircle size={13} /> {youtubeAuthError || "Authorization failed. Please try again."}
+              </p>
+            )}
           </div>
         </div>
       </TabPanel>

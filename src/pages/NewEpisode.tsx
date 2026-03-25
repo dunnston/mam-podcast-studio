@@ -6,6 +6,7 @@ import { ExtractStep } from "./steps/ExtractStep";
 import { ShowNotesStep } from "./steps/ShowNotesStep";
 import { ThumbnailStep } from "./steps/ThumbnailStep";
 import { ReviewStep } from "./steps/ReviewStep";
+import { PublishStep } from "./steps/PublishStep";
 import { Check } from "lucide-react";
 
 interface StepConfig {
@@ -21,6 +22,7 @@ const STEPS: StepConfig[] = [
   { id: "show-notes", label: "Show Notes", shortLabel: "Notes" },
   { id: "thumbnail", label: "Thumbnail", shortLabel: "Cover" },
   { id: "review", label: "Review", shortLabel: "Review" },
+  { id: "publish", label: "Publish", shortLabel: "Publish" },
 ];
 
 const STEP_ORDER: WizardStep[] = [
@@ -30,6 +32,7 @@ const STEP_ORDER: WizardStep[] = [
   "show-notes",
   "thumbnail",
   "review",
+  "publish",
 ];
 
 function getStepIndex(step: WizardStep): number {
@@ -203,8 +206,12 @@ export function NewEpisode() {
         description: "Create a YouTube thumbnail for this episode.",
       },
       review: {
-        title: "Review & Done",
-        description: "Review everything before finishing.",
+        title: "Review",
+        description: "Review everything before publishing.",
+      },
+      publish: {
+        title: "Publish",
+        description: "Publish your episode to Podbean and YouTube.",
       },
     };
 
@@ -267,7 +274,7 @@ export function NewEpisode() {
       </div>
 
       {/* Step back navigation */}
-      {currentIndex > 0 && currentStep !== "review" && (
+      {currentIndex > 0 && currentStep !== "publish" && (
         <button
           onClick={() => setCurrentStep(STEP_ORDER[currentIndex - 1])}
           style={{
@@ -304,6 +311,7 @@ export function NewEpisode() {
         {currentStep === "show-notes" && <ShowNotesStep />}
         {currentStep === "thumbnail" && <ThumbnailStep />}
         {currentStep === "review" && <ReviewStep />}
+        {currentStep === "publish" && <PublishStep />}
       </div>
     </div>
   );

@@ -10,6 +10,11 @@ interface SettingsState {
   claudeApiKey: string;
   aiEnhancementApiKey: string;
   removeBgApiKey: string;
+  podbeanClientId: string;
+  podbeanClientSecret: string;
+  youtubeClientId: string;
+  youtubeClientSecret: string;
+  youtubeRefreshToken: string;
 
   // Preferences
   fileNamingTemplate: string;
@@ -27,6 +32,11 @@ interface SettingsState {
   setClaudeApiKey: (key: string) => void;
   setAiEnhancementApiKey: (key: string) => void;
   setRemoveBgApiKey: (key: string) => void;
+  setPodbeanClientId: (key: string) => void;
+  setPodbeanClientSecret: (key: string) => void;
+  setYoutubeClientId: (key: string) => void;
+  setYoutubeClientSecret: (key: string) => void;
+  setYoutubeRefreshToken: (token: string) => void;
   setFileNamingTemplate: (template: string) => void;
   setAutoIncrementEpisode: (auto: boolean) => void;
   setDefaultTags: (tags: string[]) => void;
@@ -40,6 +50,11 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   claudeApiKey: "",
   aiEnhancementApiKey: "",
   removeBgApiKey: "",
+  podbeanClientId: "",
+  podbeanClientSecret: "",
+  youtubeClientId: "",
+  youtubeClientSecret: "",
+  youtubeRefreshToken: "",
   fileNamingTemplate: "MAM-{episode_number}-{title}",
   autoIncrementEpisode: true,
   defaultTags: [],
@@ -54,6 +69,11 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setClaudeApiKey: (key) => set({ claudeApiKey: key }),
   setAiEnhancementApiKey: (key) => set({ aiEnhancementApiKey: key }),
   setRemoveBgApiKey: (key) => set({ removeBgApiKey: key }),
+  setPodbeanClientId: (key) => set({ podbeanClientId: key }),
+  setPodbeanClientSecret: (key) => set({ podbeanClientSecret: key }),
+  setYoutubeClientId: (key) => set({ youtubeClientId: key }),
+  setYoutubeClientSecret: (key) => set({ youtubeClientSecret: key }),
+  setYoutubeRefreshToken: (token) => set({ youtubeRefreshToken: token }),
   setFileNamingTemplate: (template) => set({ fileNamingTemplate: template }),
   setAutoIncrementEpisode: (auto) => set({ autoIncrementEpisode: auto }),
   setDefaultTags: (tags) => set({ defaultTags: tags }),
@@ -68,6 +88,11 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       claudeApiKey: settings.claudeApiKey || "",
       aiEnhancementApiKey: settings.aiEnhancementApiKey || "",
       removeBgApiKey: settings.removeBgApiKey || "",
+      podbeanClientId: settings.podbeanClientId || "",
+      podbeanClientSecret: settings.podbeanClientSecret || "",
+      youtubeClientId: settings.youtubeClientId || "",
+      youtubeClientSecret: settings.youtubeClientSecret || "",
+      youtubeRefreshToken: settings.youtubeRefreshToken || "",
       fileNamingTemplate:
         settings.fileNamingTemplate || "MAM-{episode_number}-{title}",
       autoIncrementEpisode: settings.autoIncrementEpisode !== "false",

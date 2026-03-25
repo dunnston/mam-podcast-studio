@@ -99,6 +99,50 @@ async fn mux_audio_into_video(
     Ok(())
 }
 
+/// Extract plain text from a Cleanvoice transcript JSON value.
+/// The API may return a string, an array of segment objects, or an object with a text field.
+fn extract_transcript_text(transcript: &serde_json::Value) -> String {
+    // Case 1: Plain string
+    if let Some(s) = transcript.as_str() {
+        return s.to_string();
+    }
+
+    // Case 2: Object with a "text" field
+    if let Some(obj) = transcript.as_object() {
+        if let Some(text) = obj.get("text").and_then(|v| v.as_str()) {
+            return text.to_string();
+        }
+        // Object with "segments" array
+        if let Some(segments) = obj.get("segments").and_then(|v| v.as_array()) {
+            return segments
+                .iter()
+                .filter_map(|seg| seg.get("text").and_then(|t| t.as_str()))
+                .collect::<Vec<_>>()
+                .join(" ");
+        }
+    }
+
+    // Case 3: Array of segment objects (each with "text" field)
+    if let Some(arr) = transcript.as_array() {
+        let texts: Vec<&str> = arr
+            .iter()
+            .filter_map(|seg| seg.get("text").and_then(|t| t.as_str()))
+            .collect();
+        if !texts.is_empty() {
+            return texts.join(" ");
+        }
+        // Array of plain strings
+        let strings: Vec<&str> = arr.iter().filter_map(|v| v.as_str()).collect();
+        if !strings.is_empty() {
+            return strings.join(" ");
+        }
+    }
+
+    // Fallback: serialize to string for debugging
+    eprintln!("[Cleanvoice] Unknown transcript format: {}", transcript);
+    String::new()
+}
+
 #[tauri::command]
 pub async fn cleanvoice_enhance(
     app: AppHandle,
@@ -117,6 +161,7 @@ pub async fn cleanvoice_enhance(
     let output_path = PathBuf::from(&request.output_path);
 
     // Build the config from request
+    // Always enable transcription so we can use it for show notes
     let mut config = EditConfig {
         fillers: request.fillers,
         long_silences: request.long_silences,
@@ -131,7 +176,7 @@ pub async fn cleanvoice_enhance(
         keep_music: None,
         export_format: request.export_format.clone(),
         target_lufs: request.target_lufs,
-        transcription: request.transcription,
+        transcription: Some(true),
         summarize: request.summarize,
         video: None, // Set below based on routing
     };
@@ -160,7 +205,7 @@ pub async fn cleanvoice_enhance(
         let temp_audio = output_path
             .parent()
             .unwrap_or(std::path::Path::new("."))
-            .join("_cleanvoice_temp_audio.aac");
+            .join("_cleanvoice_temp_audio.m4a");
 
         extract_audio_from_video(
             &app,
@@ -196,7 +241,7 @@ pub async fn cleanvoice_enhance(
         output_path
             .parent()
             .unwrap_or(std::path::Path::new("."))
-            .join("_cleanvoice_temp_enhanced.aac")
+            .join("_cleanvoice_temp_enhanced.m4a")
     } else {
         output_path.clone()
     };
@@ -243,7 +288,7 @@ pub async fn cleanvoice_enhance(
         let temp_audio = output_path
             .parent()
             .unwrap_or(std::path::Path::new("."))
-            .join("_cleanvoice_temp_audio.aac");
+            .join("_cleanvoice_temp_audio.m4a");
         let _ = tokio::fs::remove_file(&temp_audio).await;
         let _ = tokio::fs::remove_file(&cleanvoice_output).await;
 
@@ -259,13 +304,23 @@ pub async fn cleanvoice_enhance(
         let temp_audio = output_path
             .parent()
             .unwrap_or(std::path::Path::new("."))
-            .join("_cleanvoice_temp_audio.aac");
+            .join("_cleanvoice_temp_audio.m4a");
         let _ = tokio::fs::remove_file(&temp_audio).await;
     }
 
     // Emit stats if available
     if let Some(ref edit_result) = result.result {
         let _ = app.emit("cleanvoice-stats", edit_result);
+
+        // Emit transcript if Cleanvoice returned one
+        if let Some(ref transcript) = edit_result.transcript {
+            // Convert transcript JSON to plain text
+            let transcript_text = extract_transcript_text(transcript);
+            if !transcript_text.is_empty() {
+                eprintln!("[Cleanvoice] Emitting transcript ({} chars)", transcript_text.len());
+                let _ = app.emit("cleanvoice-transcript", &transcript_text);
+            }
+        }
     }
 
     Ok(request.output_path)

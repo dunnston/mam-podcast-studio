@@ -157,6 +157,128 @@ export async function testCleanvoiceApi(apiKey: string): Promise<CleanvoiceAuthI
   return invoke("test_cleanvoice_api", { apiKey });
 }
 
+// ─── Podbean ─────────────────────────────────────────────────────
+
+export interface PodbeanProgress {
+  stage: string;    // "auth", "upload", "publish", "done"
+  message: string;
+  percent: number;  // 0-100
+}
+
+export interface PodbeanPublishRequest {
+  client_id: string;
+  client_secret: string;
+  audio_path: string;
+  title: string;
+  content: string;
+  status?: string;  // "publish" | "draft" | "future"
+}
+
+export interface PodbeanPublishResult {
+  episode_id?: string;
+  permalink_url?: string;
+  media_url?: string;
+}
+
+export interface PodbeanTokenInfo {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+  scope?: string;
+}
+
+export async function podbeanPublish(
+  request: PodbeanPublishRequest
+): Promise<PodbeanPublishResult> {
+  return invoke("podbean_publish", { request });
+}
+
+export async function testPodbeanApi(
+  clientId: string,
+  clientSecret: string
+): Promise<PodbeanTokenInfo> {
+  return invoke("test_podbean_api", { clientId, clientSecret });
+}
+
+export async function podbeanListPodcasts(
+  clientId: string,
+  clientSecret: string
+): Promise<unknown[]> {
+  return invoke("podbean_list_podcasts", { clientId, clientSecret });
+}
+
+export function onPodbeanProgress(
+  callback: (progress: PodbeanProgress) => void
+): Promise<UnlistenFn> {
+  return listen<PodbeanProgress>("podbean-progress", (event) => {
+    callback(event.payload);
+  });
+}
+
+// ─── YouTube ─────────────────────────────────────────────────────
+
+export interface YouTubeProgress {
+  stage: string;    // "auth", "upload", "thumbnail", "done"
+  message: string;
+  percent: number;  // 0-100
+}
+
+export interface YouTubeTokenInfo {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+  refresh_token?: string;
+  scope?: string;
+}
+
+export interface YouTubeUploadRequest {
+  client_id: string;
+  client_secret: string;
+  refresh_token: string;
+  video_path: string;
+  title: string;
+  description: string;
+  tags?: string[];
+  privacy_status?: string;  // "public" | "private" | "unlisted"
+  category_id?: string;
+  thumbnail_path?: string;
+}
+
+export interface YouTubeUploadResult {
+  video_id?: string;
+  channel_id?: string;
+  upload_status?: string;
+}
+
+export async function youtubeOAuthStart(
+  clientId: string,
+  clientSecret: string
+): Promise<YouTubeTokenInfo> {
+  return invoke("youtube_oauth_start", { clientId, clientSecret });
+}
+
+export async function youtubeRefreshToken(
+  clientId: string,
+  clientSecret: string,
+  refreshToken: string
+): Promise<YouTubeTokenInfo> {
+  return invoke("youtube_refresh_token", { clientId, clientSecret, refreshToken });
+}
+
+export async function youtubeUpload(
+  request: YouTubeUploadRequest
+): Promise<YouTubeUploadResult> {
+  return invoke("youtube_upload", { request });
+}
+
+export function onYouTubeProgress(
+  callback: (progress: YouTubeProgress) => void
+): Promise<UnlistenFn> {
+  return listen<YouTubeProgress>("youtube-progress", (event) => {
+    callback(event.payload);
+  });
+}
+
 // ─── Settings ───────────────────────────────────────────────────
 
 export async function testClaudeApi(apiKey: string): Promise<boolean> {
@@ -194,6 +316,14 @@ export function onCleanvoiceProgress(
   callback: (progress: CleanvoiceProgress) => void
 ): Promise<UnlistenFn> {
   return listen<CleanvoiceProgress>("cleanvoice-progress", (event) => {
+    callback(event.payload);
+  });
+}
+
+export function onCleanvoiceTranscript(
+  callback: (transcript: string) => void
+): Promise<UnlistenFn> {
+  return listen<string>("cleanvoice-transcript", (event) => {
     callback(event.payload);
   });
 }
