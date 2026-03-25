@@ -79,12 +79,20 @@ pub async fn enhance_audio(
                 }
             }
             CommandEvent::Terminated(status) => {
-                // Clear process handle
-                let mut proc = CURRENT_PROCESS.lock().unwrap();
-                *proc = None;
+                // Check if this was a cancellation (PID already cleared by cancel_processing)
+                let was_cancelled = {
+                    let mut proc = CURRENT_PROCESS.lock().unwrap();
+                    let cancelled = proc.is_none();
+                    *proc = None;
+                    cancelled
+                };
 
                 if status.code == Some(0) {
                     return Ok(output_path);
+                } else if was_cancelled {
+                    // Clean up partial output file
+                    let _ = std::fs::remove_file(&output_path);
+                    return Err("Processing cancelled".to_string());
                 } else {
                     return Err(format!(
                         "FFmpeg exited with code: {:?}",
@@ -101,10 +109,29 @@ pub async fn enhance_audio(
 
 #[tauri::command]
 pub async fn cancel_processing() -> Result<(), String> {
-    let proc = CURRENT_PROCESS.lock().unwrap();
-    if let Some(_pid) = *proc {
-        // On Windows/macOS we'd kill the process
-        // For now, the frontend can handle this by dropping the listener
+    let pid = {
+        let mut proc = CURRENT_PROCESS.lock().unwrap();
+        proc.take()
+    };
+
+    if let Some(pid) = pid {
+        // Kill the FFmpeg process tree
+        #[cfg(target_os = "windows")]
+        {
+            // On Windows, use taskkill to kill the process and its children
+            let _ = std::process::Command::new("taskkill")
+                .args(["/F", "/T", "/PID", &pid.to_string()])
+                .output();
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            // On macOS/Linux, send SIGKILL
+            let _ = std::process::Command::new("kill")
+                .args(["-9", &pid.to_string()])
+                .output();
+        }
+
         Ok(())
     } else {
         Err("No active processing to cancel".to_string())
