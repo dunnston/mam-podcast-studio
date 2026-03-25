@@ -21,3 +21,6 @@ Thumbs.db
 
 # Tauri
 src-tauri/gen/
+
+# FFmpeg sidecar binaries (too large for git, copy manually)
+src-tauri/binaries/*.exe

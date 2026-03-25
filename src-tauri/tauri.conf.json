@@ -35,45 +35,11 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
+    ],
+    "externalBin": [
+      "binaries/ffmpeg",
+      "binaries/ffprobe"
     ]
   },
-  "plugins": {
-    "sql": {
-      "preload": {
-        "db": "sqlite:mam_podcast_studio.db"
-      }
-    },
-    "shell": {
-      "sidecar": true,
-      "scope": [
-        {
-          "name": "ffmpeg",
-          "sidecar": true,
-          "args": true
-        },
-        {
-          "name": "ffprobe",
-          "sidecar": true,
-          "args": true
-        }
-      ]
-    },
-    "fs": {
-      "scope": {
-        "allow": [
-          "$APPDATA/**",
-          "$HOME/**",
-          "$DESKTOP/**",
-          "$DOCUMENT/**",
-          "$DOWNLOAD/**",
-          "$VIDEO/**",
-          "$AUDIO/**"
-        ]
-      }
-    },
-    "dialog": {
-      "open": true,
-      "save": true
-    }
-  }
+  "plugins": {}
 }

@@ -4,7 +4,7 @@ use tauri::AppHandle;
 
 #[tauri::command]
 pub async fn generate_show_notes(
-    app: AppHandle,
+    _app: AppHandle,
     api_key: String,
     transcript: String,
     system_prompt: Option<String>,

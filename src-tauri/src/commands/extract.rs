@@ -1,13 +1,13 @@
 use tauri::{AppHandle, Emitter};
 use tauri_plugin_shell::ShellExt;
 
-
 #[derive(serde::Deserialize)]
 pub struct ExtractionRequest {
     pub input_path: String,
     pub output_dir: String,
     pub episode_name: String,
     pub formats: Vec<String>, // ["mp3", "m4a", "wav"]
+    #[allow(dead_code)]
     pub total_duration: f64,
     // Metadata
     pub title: Option<String>,
@@ -30,13 +30,12 @@ pub async fn extract_audio(
     let mut results = Vec::new();
 
     for format in &request.formats {
-        let (extension, args) = match format.as_str() {
+        let (output_path, args) = match format.as_str() {
             "mp3" => {
-                let filename = format!(
-                    "{}.mp3",
-                    &request.episode_name
+                let output_path = format!(
+                    "{}/{}.mp3",
+                    &request.output_dir, &request.episode_name
                 );
-                let output_path = format!("{}/{}", &request.output_dir, filename);
                 let mut args = vec![
                     "-y".to_string(),
                     "-i".to_string(),
@@ -62,11 +61,10 @@ pub async fn extract_audio(
                 (output_path, args)
             }
             "m4a" => {
-                let filename = format!(
-                    "{}.m4a",
-                    &request.episode_name
+                let output_path = format!(
+                    "{}/{}.m4a",
+                    &request.output_dir, &request.episode_name
                 );
-                let output_path = format!("{}/{}", &request.output_dir, filename);
                 let mut args = vec![
                     "-y".to_string(),
                     "-i".to_string(),
@@ -91,11 +89,10 @@ pub async fn extract_audio(
                 (output_path, args)
             }
             "wav" => {
-                let filename = format!(
-                    "{}.wav",
-                    &request.episode_name
+                let output_path = format!(
+                    "{}/{}.wav",
+                    &request.output_dir, &request.episode_name
                 );
-                let output_path = format!("{}/{}", &request.output_dir, filename);
                 let args = vec![
                     "-y".to_string(),
                     "-i".to_string(),
@@ -130,19 +127,19 @@ pub async fn extract_audio(
         }
 
         // Get file size
-        let file_size = std::fs::metadata(&extension)
+        let file_size = std::fs::metadata(&output_path)
             .map(|m| m.len())
             .unwrap_or(0);
 
         results.push(ExtractionResult {
             format: format.clone(),
-            file_path: extension,
+            file_path: output_path,
             file_size_bytes: file_size,
         });
 
         let _ = app.emit("extraction-progress", serde_json::json!({
             "format": format,
-            "status": "completed"
+            "status": "done"
         }));
     }
 

@@ -18,6 +18,7 @@
     "shell:default",
     "shell:allow-execute",
     "shell:allow-spawn",
+    "shell:allow-open",
     "sql:default",
     "sql:allow-load",
     "sql:allow-execute",
