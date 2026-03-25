@@ -49,6 +49,7 @@ interface EpisodeState {
   selectedFormats: string[];
   showNotesContent: string;
   showNotesEdited: string;
+  cleanvoiceTranscript: string;
 
   // Processing state
   isProcessing: boolean;
@@ -66,6 +67,7 @@ interface EpisodeState {
   setSelectedFormats: (formats: string[]) => void;
   setShowNotesContent: (content: string) => void;
   setShowNotesEdited: (content: string) => void;
+  setCleanvoiceTranscript: (transcript: string) => void;
   setProcessing: (processing: boolean) => void;
   setProgress: (progress: number, eta?: string) => void;
   resetWizard: () => void;
@@ -80,6 +82,7 @@ const initialState = {
   selectedFormats: ["mp3", "m4a"],
   showNotesContent: "",
   showNotesEdited: "",
+  cleanvoiceTranscript: "",
   isProcessing: false,
   processingProgress: 0,
   processingEta: "",
@@ -96,6 +99,7 @@ export const useEpisodeStore = create<EpisodeState>((set) => ({
   setSelectedFormats: (formats) => set({ selectedFormats: formats }),
   setShowNotesContent: (content) => set({ showNotesContent: content }),
   setShowNotesEdited: (content) => set({ showNotesEdited: content }),
+  setCleanvoiceTranscript: (transcript) => set({ cleanvoiceTranscript: transcript }),
   setProcessing: (processing) => set({ isProcessing: processing }),
   setProgress: (progress, eta) =>
     set({ processingProgress: progress, processingEta: eta || "" }),
@@ -133,6 +137,7 @@ export const useEpisodeStore = create<EpisodeState>((set) => ({
         : null,
       showNotesContent: showNotes || "",
       showNotesEdited: showNotes || "",
+      cleanvoiceTranscript: "",
       isProcessing: false,
       processingProgress: 0,
       processingEta: "",

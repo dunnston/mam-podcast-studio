@@ -19,6 +19,7 @@ import {
   cleanvoiceEnhance,
   cleanvoiceCancel,
   onCleanvoiceProgress,
+  onCleanvoiceTranscript,
 } from "../../lib/tauri";
 import { updateEpisode } from "../../lib/database";
 import type { ProcessingProgress } from "../../lib/tauri";
@@ -141,6 +142,7 @@ export function EnhanceStep() {
     setEnhancementPreset,
     setCurrentStep,
     setCurrentEpisode,
+    setCleanvoiceTranscript,
     isProcessing,
     processingProgress,
     processingEta,
@@ -168,6 +170,7 @@ export function EnhanceStep() {
 
   const unlistenFfmpegRef = useRef<(() => void) | null>(null);
   const unlistenCvRef = useRef<(() => void) | null>(null);
+  const unlistenTranscriptRef = useRef<(() => void) | null>(null);
 
   // If episode already enhanced, show completed state
   useEffect(() => {
@@ -208,6 +211,21 @@ export function EnhanceStep() {
       unlistenCvRef.current?.();
     };
   }, [setProgress]);
+
+  // Subscribe to Cleanvoice transcript event
+  useEffect(() => {
+    let active = true;
+    onCleanvoiceTranscript((transcript) => {
+      if (!active) return;
+      setCleanvoiceTranscript(transcript);
+    }).then((unlisten) => {
+      unlistenTranscriptRef.current = unlisten;
+    });
+    return () => {
+      active = false;
+      unlistenTranscriptRef.current?.();
+    };
+  }, [setCleanvoiceTranscript]);
 
   // ─── Helpers ──────────────────────────────────────────────────
   const buildEpisodeName = () => {
@@ -269,7 +287,7 @@ export function EnhanceStep() {
         // Determine output: if editing, Cleanvoice returns video; if enhance-only, returns audio
         const cvOutputPath = isEditing
           ? `${enhancedVideoDirectory}/${episodeName}-cv-enhanced.mp4`
-          : `${enhancedVideoDirectory}/${episodeName}-cv-enhanced.aac`;
+          : `${enhancedVideoDirectory}/${episodeName}-cv-enhanced.m4a`;
 
         const cleanResult = await cleanvoiceEnhance({
           api_key: aiEnhancementApiKey,
