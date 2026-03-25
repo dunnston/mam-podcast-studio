@@ -65,6 +65,7 @@ pub async fn enhance_audio(
     // Read output for progress
     use tauri_plugin_shell::process::CommandEvent;
     let mut progress_acc = ffmpeg::ProgressAccumulator::default();
+    let mut last_stderr_lines: Vec<String> = Vec::new();
     while let Some(event) = rx.recv().await {
         match event {
             CommandEvent::Stdout(line) => {
@@ -77,7 +78,13 @@ pub async fn enhance_audio(
                 }
             }
             CommandEvent::Stderr(line) => {
-                let line_str = String::from_utf8_lossy(&line);
+                let line_str = String::from_utf8_lossy(&line).to_string();
+                eprintln!("[FFmpeg] {}", line_str);
+                // Keep last 10 stderr lines for error reporting
+                last_stderr_lines.push(line_str.clone());
+                if last_stderr_lines.len() > 10 {
+                    last_stderr_lines.remove(0);
+                }
                 // Also check stderr for the single-line progress format
                 if let Some(progress) = ffmpeg::parse_progress_stderr(&line_str, total_duration) {
                     let _ = app.emit("enhancement-progress", &progress);
@@ -99,9 +106,10 @@ pub async fn enhance_audio(
                     let _ = std::fs::remove_file(&output_path);
                     return Err("Processing cancelled".to_string());
                 } else {
+                    let stderr_tail = last_stderr_lines.join("\n");
                     return Err(format!(
-                        "FFmpeg exited with code: {:?}",
-                        status.code
+                        "FFmpeg exited with code {:?}:\n{}",
+                        status.code, stderr_tail
                     ));
                 }
             }

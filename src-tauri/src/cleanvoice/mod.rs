@@ -115,9 +115,11 @@ pub struct EditResponse {
 }
 
 /// Response from GET /v2/edits/{id}
+/// Handles both documented format and actual API format
 #[derive(Deserialize, Debug, Clone, Serialize)]
 pub struct EditStatus {
-    pub id: String,
+    #[serde(alias = "task_id", default)]
+    pub id: Option<String>,
     pub status: String,
     pub result: Option<EditResult>,
     pub error: Option<String>,
@@ -126,11 +128,33 @@ pub struct EditStatus {
 #[derive(Deserialize, Debug, Clone, Serialize)]
 pub struct EditResult {
     /// Download URL for the processed file
+    #[serde(alias = "download_url")]
     pub url: Option<String>,
+    /// Output filename
+    pub filename: Option<String>,
+    /// Whether result is video
+    pub video: Option<bool>,
+    /// Edit statistics (e.g., {"MOUTH_SOUND": 7, "FILLER_SOUND": 1})
+    pub statistics: Option<serde_json::Value>,
     /// Transcript (if transcription was enabled)
     pub transcript: Option<serde_json::Value>,
     /// Summary (if summarize was enabled)
+    #[serde(alias = "summarization")]
     pub summary: Option<serde_json::Value>,
+    /// Social content (if enabled)
+    pub social_content: Option<serde_json::Value>,
+    /// Progress: amount done (minutes processed)
+    pub done: Option<f64>,
+    /// Progress: total amount (minutes total)
+    pub total: Option<f64>,
+    /// Current processing state (e.g., "PREPROCESSING", "EDITING")
+    pub state: Option<String>,
+    /// Current processing phase
+    pub phase: Option<u32>,
+    /// Current step within phase
+    pub step: Option<u32>,
+    /// Job name
+    pub job_name: Option<String>,
 }
 
 /// Response from POST /v2/upload(s)
@@ -293,18 +317,33 @@ impl CleanvoiceClient {
             .await
             .context("Failed to submit edit to Cleanvoice")?;
 
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
-            anyhow::bail!("Edit submission failed ({}): {}", status, body);
+        let status = resp.status();
+        let resp_text = resp.text().await.unwrap_or_default();
+        eprintln!("[Cleanvoice] Edit response ({}): {}", status, resp_text);
+
+        if !status.is_success() {
+            // Try to extract a human-readable error message
+            if let Ok(err_json) = serde_json::from_str::<serde_json::Value>(&resp_text) {
+                if let Some(msg) = err_json.get("error").and_then(|e| e.get("message")).and_then(|m| m.as_str()) {
+                    anyhow::bail!("{}", msg);
+                }
+            }
+            anyhow::bail!("Edit submission failed ({}): {}", status, resp_text);
         }
 
-        let edit_resp: EditResponse = resp
-            .json()
-            .await
-            .context("Failed to parse edit response")?;
+        // Try parsing as EditResponse, with fallback for unexpected formats
+        if let Ok(edit_resp) = serde_json::from_str::<EditResponse>(&resp_text) {
+            return Ok(edit_resp.id);
+        }
 
-        Ok(edit_resp.id)
+        // Fallback: try extracting "id" from raw JSON
+        if let Ok(raw) = serde_json::from_str::<serde_json::Value>(&resp_text) {
+            if let Some(id) = raw.get("id").and_then(|v| v.as_str()) {
+                return Ok(id.to_string());
+            }
+        }
+
+        anyhow::bail!("Unexpected edit response format: {}", resp_text)
     }
 
     /// Step 4: Check the status of an edit job
@@ -318,13 +357,20 @@ impl CleanvoiceClient {
             .await
             .context("Failed to check edit status")?;
 
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
-            anyhow::bail!("Status check failed ({}): {}", status, body);
+        let status_code = resp.status();
+        let resp_text = resp.text().await.unwrap_or_default();
+
+        if !status_code.is_success() {
+            anyhow::bail!("Status check failed ({}): {}", status_code, resp_text);
         }
 
-        resp.json().await.context("Failed to parse edit status")
+        // Log raw response when status is SUCCESS (to debug download URL)
+        if resp_text.contains("SUCCESS") {
+            eprintln!("[Cleanvoice] Raw SUCCESS response: {}", resp_text);
+        }
+
+        serde_json::from_str(&resp_text)
+            .with_context(|| format!("Failed to parse edit status: {}", resp_text))
     }
 
     /// Step 5: Download the processed file to a local path
@@ -464,6 +510,7 @@ impl CleanvoiceClient {
 
             match status.status.as_str() {
                 "SUCCESS" => {
+                    eprintln!("[Cleanvoice] SUCCESS result: {:?}", status.result);
                     on_progress(CleanvoiceProgress {
                         stage: "processing".to_string(),
                         message: "Processing complete!".to_string(),
@@ -476,12 +523,22 @@ impl CleanvoiceClient {
                     anyhow::bail!("Cleanvoice processing failed: {}", err_msg);
                 }
                 _ => {
-                    // PENDING, STARTED, RETRY
-                    // Map poll progress to 20-85% range
-                    let progress = (20.0 + (poll_count as f64 * 0.5)).min(84.0);
+                    // PENDING, STARTED, PREPROCESSING, RETRY, etc.
+                    // Use real progress from done/total if available
+                    let (progress, detail) = if let Some(ref result) = status.result {
+                        let done = result.done.unwrap_or(0.0);
+                        let total = result.total.unwrap_or(1.0).max(0.01);
+                        let pct = (done / total * 65.0) + 20.0; // Map to 20-85% range
+                        let state = result.state.as_deref().unwrap_or(&status.status);
+                        (pct.min(84.0), format!("{} ({:.0}/{:.0} min)", state, done, total))
+                    } else {
+                        let pct = (20.0 + (poll_count as f64 * 0.5)).min(84.0);
+                        (pct, status.status.clone())
+                    };
+
                     on_progress(CleanvoiceProgress {
                         stage: "processing".to_string(),
-                        message: format!("Cleanvoice AI processing... ({})", status.status),
+                        message: format!("Cleanvoice AI: {}", detail),
                         percent: progress,
                     });
 
@@ -501,6 +558,7 @@ impl CleanvoiceClient {
         // ── Step 4: Download result ────────────────────────────
         if let Some(ref result) = final_status.result {
             if let Some(ref url) = result.url {
+                eprintln!("[Cleanvoice] Downloading from: {}", url);
                 on_progress(CleanvoiceProgress {
                     stage: "download".to_string(),
                     message: "Downloading processed file...".to_string(),
@@ -509,12 +567,19 @@ impl CleanvoiceClient {
 
                 self.download_result(url, output_path).await?;
 
+                eprintln!("[Cleanvoice] Downloaded to: {}", output_path.display());
                 on_progress(CleanvoiceProgress {
                     stage: "download".to_string(),
                     message: "Download complete".to_string(),
                     percent: 95.0,
                 });
+            } else {
+                eprintln!("[Cleanvoice] WARNING: No download URL in result: {:?}", result);
+                anyhow::bail!("Cleanvoice completed but no download URL was provided");
             }
+        } else {
+            eprintln!("[Cleanvoice] WARNING: No result object in SUCCESS response");
+            anyhow::bail!("Cleanvoice completed but no result was provided");
         }
 
         // ── Step 5: Cleanup edit from Cleanvoice ───────────────
