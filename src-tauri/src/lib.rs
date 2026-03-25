@@ -4,6 +4,8 @@ mod db;
 mod ffmpeg;
 mod claude;
 mod models;
+mod podbean;
+mod youtube;
 
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -47,6 +49,14 @@ pub fn run() {
             commands::cleanvoice::cleanvoice_enhance,
             commands::cleanvoice::cleanvoice_cancel,
             commands::cleanvoice::test_cleanvoice_api,
+            // Podbean commands
+            commands::podbean::podbean_publish,
+            commands::podbean::test_podbean_api,
+            commands::podbean::podbean_list_podcasts,
+            // YouTube commands
+            commands::youtube::youtube_oauth_start,
+            commands::youtube::youtube_refresh_token,
+            commands::youtube::youtube_upload,
             // Settings commands
             commands::settings::get_setting,
             commands::settings::set_setting,
