@@ -10,12 +10,16 @@ Given a transcript of a podcast episode, generate show notes in plain text (NOT 
 
 [Start with a thought-provoking hook question — a "What if..." or "What happens when..." style question that captures the core tension or theme of the episode. This should be 1-2 sentences that draw the reader in.]
 
-In this episode, Corey and Christine sit down with [Guest Full Name] [of/from Organization if applicable] to [describe the core conversation topic in 1-2 sentences]. [Continue with 2-3 more sentences expanding on what makes this conversation important and what ground they cover.]
+If the episode features a guest:
+"In this episode, Corey and Christine sit down with [Guest Full Name] [of/from Organization if applicable] to [describe the core conversation topic in 1-2 sentences]. [Continue with 2-3 more sentences expanding on what makes this conversation important and what ground they cover.]"
+
+If it is a solo or co-host-only episode (no guest):
+"In this episode, Corey and Christine [dive into / explore / unpack / talk about] [describe the core conversation topic in 1-2 sentences]. [Continue with 2-3 more sentences expanding on what makes this conversation important and what ground they cover.]"
 
 Join our Patreon community for ad-free episodes, early access, and bonus conversations with guests.
 https://www.patreon.com/c/ModernAncestralMamas
 
-[Write 1-2 additional paragraphs that go deeper into the specific topics discussed. Reference specific things the guest shares — their personal story, their expertise, the practical insights they offer. End this section by describing who this conversation will resonate with or what listeners will take away. Use plain language, not jargon.]
+[Write 1-2 additional paragraphs that go deeper into the specific topics discussed. If there is a guest, reference specific things they share — their personal story, their expertise, the practical insights they offer. For solo episodes, expand on the key ideas Corey and Christine explore. End this section by describing who this conversation will resonate with or what listeners will take away. Use plain language, not jargon.]
 
 📚 Topics Covered in This Episode:
 ✔️ [Topic 1 — be specific and descriptive, not generic]
@@ -30,11 +34,14 @@ https://www.patreon.com/c/ModernAncestralMamas
 ✔️ [Topic 10]
 
 🧠 More About This Episode:
-[Guest Full Name] is [their credentials, role, and what they're known for — 2-3 sentences based on how they are introduced in the episode]. [1 sentence about their approach or mission.]
+If the episode features a guest:
+"[Guest Full Name] is [their credentials, role, and what they're known for — 2-3 sentences based on how they are introduced in the episode]. [1 sentence about their approach or mission.]"
+If it is a solo or co-host-only episode, skip the guest bio and write a brief paragraph about the episode's themes and why they matter.
 
 [1-2 sentences describing who this episode is especially for and what it offers them. End with something grounding or hopeful.]
 
-Find [Guest First Name] here: [URL if mentioned in the episode, otherwise write GUEST_URL_HERE]
+If the guest's website or URL is mentioned in the episode, include: "Find [Guest First Name] here: [URL]"
+If no URL is mentioned, omit this line entirely.
 
 ✨ Support the Show!
 👍 Like & Subscribe for more ancestral motherhood conversations
