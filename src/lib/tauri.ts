@@ -181,6 +181,14 @@ export function onCleanvoiceProgress(
   });
 }
 
+export function onCleanvoiceTranscript(
+  callback: (transcript: string) => void
+): Promise<UnlistenFn> {
+  return listen<string>("cleanvoice-transcript", (event) => {
+    callback(event.payload);
+  });
+}
+
 export function onExtractionProgress(
   callback: (data: { format: string; status: string }) => void
 ): Promise<UnlistenFn> {

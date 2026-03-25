@@ -9,6 +9,7 @@ import {
   DollarSign,
   Hash,
   ArrowRight,
+  Mic,
 } from "lucide-react";
 import { useEpisodeStore } from "../../stores/episodeStore";
 import {
@@ -49,15 +50,26 @@ export function ShowNotesStep() {
     currentEpisode,
     showNotesContent,
     showNotesEdited,
+    cleanvoiceTranscript,
     setShowNotesContent,
     setShowNotesEdited,
     setCurrentStep,
   } = useEpisodeStore();
 
   const { claudeApiKey } = useSettingsStore();
+  const [transcriptSource, setTranscriptSource] = useState<"none" | "cleanvoice" | "file">("none");
   const [transcriptPath, setTranscriptPath] = useState<string | null>(null);
   const [transcriptText, setTranscriptText] = useState<string>("");
   const [isLoadingTranscript, setIsLoadingTranscript] = useState(false);
+
+  // Auto-populate with Cleanvoice transcript if available on mount
+  const hasCleanvoiceTranscript = Boolean(cleanvoiceTranscript);
+  const initializedRef = useRef(false);
+  if (!initializedRef.current && cleanvoiceTranscript) {
+    initializedRef.current = true;
+    setTranscriptText(cleanvoiceTranscript);
+    setTranscriptSource("cleanvoice");
+  }
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationResult, setGenerationResult] = useState<GenerationResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -76,11 +88,18 @@ export function ShowNotesStep() {
       const text = await readTranscript(path);
       setTranscriptPath(path);
       setTranscriptText(text);
+      setTranscriptSource("file");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to read transcript.");
     } finally {
       setIsLoadingTranscript(false);
     }
+  };
+
+  const handleUseCleanvoiceTranscript = () => {
+    setTranscriptText(cleanvoiceTranscript);
+    setTranscriptPath(null);
+    setTranscriptSource("cleanvoice");
   };
 
   const handleDrop = async (e: React.DragEvent) => {
@@ -160,7 +179,7 @@ export function ShowNotesStep() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "28px" }}>
-      {/* Transcript upload */}
+      {/* Transcript source */}
       <div>
         <p
           style={{
@@ -176,68 +195,127 @@ export function ShowNotesStep() {
           Transcript
         </p>
 
-        <div
-          ref={dropRef}
-          onDrop={handleDrop}
-          onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-          onDragLeave={(e) => {
-            if (!dropRef.current?.contains(e.relatedTarget as Node)) {
-              setIsDragging(false);
-            }
-          }}
-          onClick={!transcriptPath ? handleBrowseTranscript : undefined}
-          style={{
-            border: `2px dashed ${isDragging ? "var(--color-sage)" : transcriptPath ? "var(--color-sage-dark)" : "var(--color-border)"}`,
-            borderRadius: "12px",
-            padding: "32px 24px",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: "10px",
-            cursor: transcriptPath ? "default" : "pointer",
-            backgroundColor: isDragging
-              ? "rgba(122, 139, 111, 0.06)"
-              : "var(--color-surface)",
-            transition: "border-color 150ms ease, background-color 150ms ease",
-          }}
-        >
-          {isLoadingTranscript ? (
-            <p style={{ fontFamily: "var(--font-body)", fontSize: "14px", color: "var(--color-text-muted)" }}>
-              Reading transcript...
-            </p>
-          ) : transcriptPath ? (
-            <div style={{ display: "flex", alignItems: "center", gap: "12px", width: "100%" }}>
-              <FileText size={20} style={{ color: "var(--color-sage)", flexShrink: 0 }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontFamily: "var(--font-body)", fontSize: "14px", fontWeight: "500", color: "var(--color-cream)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {transcriptPath.split(/[\\/]/).pop()}
-                </p>
-                <p style={{ fontFamily: "var(--font-body)", fontSize: "12px", color: "var(--color-text-muted)" }}>
-                  {transcriptText.length.toLocaleString()} characters
-                </p>
-              </div>
-              <button
-                onClick={handleBrowseTranscript}
-                style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "var(--font-body)", fontSize: "12px", color: "var(--color-sage)", textDecoration: "underline", flexShrink: 0 }}
-              >
-                Change
-              </button>
+        {/* Cleanvoice transcript available */}
+        {hasCleanvoiceTranscript && transcriptSource === "cleanvoice" && (
+          <div
+            style={{
+              border: "2px solid var(--color-sage-dark)",
+              borderRadius: "12px",
+              padding: "18px 20px",
+              display: "flex",
+              alignItems: "center",
+              gap: "12px",
+              backgroundColor: "rgba(122, 139, 111, 0.06)",
+            }}
+          >
+            <Mic size={20} style={{ color: "var(--color-sage)", flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontFamily: "var(--font-body)", fontSize: "14px", fontWeight: "500", color: "var(--color-cream)", marginBottom: "2px" }}>
+                Cleanvoice AI Transcript
+              </p>
+              <p style={{ fontFamily: "var(--font-body)", fontSize: "12px", color: "var(--color-text-muted)" }}>
+                {cleanvoiceTranscript.length.toLocaleString()} characters — auto-generated during enhancement
+              </p>
             </div>
-          ) : (
-            <>
-              <UploadCloud size={24} style={{ color: isDragging ? "var(--color-sage)" : "var(--color-text-muted)" }} />
-              <div style={{ textAlign: "center" }}>
-                <p style={{ fontFamily: "var(--font-body)", fontSize: "14px", fontWeight: "500", color: "var(--color-cream)", marginBottom: "4px" }}>
-                  Drop your transcript here
+            <button
+              onClick={handleBrowseTranscript}
+              style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "var(--font-body)", fontSize: "12px", color: "var(--color-sage)", textDecoration: "underline", flexShrink: 0 }}
+            >
+              Upload different
+            </button>
+          </div>
+        )}
+
+        {/* File upload (shown when no Cleanvoice transcript, or user chose file source) */}
+        {(transcriptSource === "file" || !hasCleanvoiceTranscript) && (
+          <>
+            <div
+              ref={dropRef}
+              onDrop={handleDrop}
+              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+              onDragLeave={(e) => {
+                if (!dropRef.current?.contains(e.relatedTarget as Node)) {
+                  setIsDragging(false);
+                }
+              }}
+              onClick={!transcriptPath ? handleBrowseTranscript : undefined}
+              style={{
+                border: `2px dashed ${isDragging ? "var(--color-sage)" : transcriptPath ? "var(--color-sage-dark)" : "var(--color-border)"}`,
+                borderRadius: "12px",
+                padding: "32px 24px",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "10px",
+                cursor: transcriptPath ? "default" : "pointer",
+                backgroundColor: isDragging
+                  ? "rgba(122, 139, 111, 0.06)"
+                  : "var(--color-surface)",
+                transition: "border-color 150ms ease, background-color 150ms ease",
+              }}
+            >
+              {isLoadingTranscript ? (
+                <p style={{ fontFamily: "var(--font-body)", fontSize: "14px", color: "var(--color-text-muted)" }}>
+                  Reading transcript...
                 </p>
-                <p style={{ fontFamily: "var(--font-body)", fontSize: "12px", color: "var(--color-text-muted)" }}>
-                  or <span style={{ color: "var(--color-sage)", textDecoration: "underline" }}>click to browse</span> — TXT, DOCX, PDF, MD
-                </p>
-              </div>
-            </>
-          )}
-        </div>
+              ) : transcriptPath ? (
+                <div style={{ display: "flex", alignItems: "center", gap: "12px", width: "100%" }}>
+                  <FileText size={20} style={{ color: "var(--color-sage)", flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontFamily: "var(--font-body)", fontSize: "14px", fontWeight: "500", color: "var(--color-cream)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {transcriptPath.split(/[\\/]/).pop()}
+                    </p>
+                    <p style={{ fontFamily: "var(--font-body)", fontSize: "12px", color: "var(--color-text-muted)" }}>
+                      {transcriptText.length.toLocaleString()} characters
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleBrowseTranscript}
+                    style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "var(--font-body)", fontSize: "12px", color: "var(--color-sage)", textDecoration: "underline", flexShrink: 0 }}
+                  >
+                    Change
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <UploadCloud size={24} style={{ color: isDragging ? "var(--color-sage)" : "var(--color-text-muted)" }} />
+                  <div style={{ textAlign: "center" }}>
+                    <p style={{ fontFamily: "var(--font-body)", fontSize: "14px", fontWeight: "500", color: "var(--color-cream)", marginBottom: "4px" }}>
+                      Drop your transcript here
+                    </p>
+                    <p style={{ fontFamily: "var(--font-body)", fontSize: "12px", color: "var(--color-text-muted)" }}>
+                      or <span style={{ color: "var(--color-sage)", textDecoration: "underline" }}>click to browse</span> — TXT, DOCX, PDF, MD
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Option to switch back to Cleanvoice transcript */}
+            {hasCleanvoiceTranscript && transcriptSource === "file" && (
+              <button
+                onClick={handleUseCleanvoiceTranscript}
+                style={{
+                  marginTop: "8px",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  fontFamily: "var(--font-body)",
+                  fontSize: "12px",
+                  color: "var(--color-sage)",
+                  textDecoration: "underline",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                }}
+              >
+                <Mic size={12} />
+                Use Cleanvoice transcript instead
+              </button>
+            )}
+          </>
+        )}
 
         {/* Transcript preview */}
         {transcriptText && (
