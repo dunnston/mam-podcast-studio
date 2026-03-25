@@ -132,6 +132,7 @@ export const useEpisodeStore = create<EpisodeState>((set) => ({
         : null,
       showNotesContent: showNotes || "",
       showNotesEdited: showNotes || "",
+      cleanvoiceTranscript: "",
       isProcessing: false,
       processingProgress: 0,
       processingEta: "",
