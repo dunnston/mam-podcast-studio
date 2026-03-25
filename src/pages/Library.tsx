@@ -13,12 +13,16 @@ import {
   Hash,
   Mic,
   PlusCircle,
+  PlayCircle,
 } from "lucide-react";
 import {
   listEpisodes,
   deleteEpisode,
   getAudioExports,
+  getShowNotes,
 } from "../lib/database";
+import { useEpisodeStore } from "../stores/episodeStore";
+import type { Episode } from "../stores/episodeStore";
 import type { EpisodeRow } from "../lib/database";
 import { Badge } from "../components/ui/Badge";
 import type { BadgeVariant } from "../components/ui/Badge";
@@ -60,9 +64,10 @@ function formatBytes(bytes: number): string {
 interface EpisodeCardProps {
   episode: EpisodeRow;
   onDelete: (id: number) => void;
+  onContinue: (episode: EpisodeRow) => void;
 }
 
-function EpisodeCard({ episode, onDelete }: EpisodeCardProps) {
+function EpisodeCard({ episode, onDelete, onContinue }: EpisodeCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -473,22 +478,31 @@ function EpisodeCard({ episode, onDelete }: EpisodeCardProps) {
               </div>
             )}
 
-            {/* Delete button */}
+            {/* Action buttons */}
             <div
               style={{
                 display: "flex",
-                justifyContent: "flex-end",
+                justifyContent: "space-between",
+                alignItems: "center",
                 paddingTop: "8px",
                 borderTop: "1px solid var(--color-border)",
               }}
             >
+              <Button
+                variant="primary"
+                size="sm"
+                icon={<PlayCircle size={13} />}
+                onClick={() => onContinue(episode)}
+              >
+                {episode.status === "published" ? "View Episode" : "Continue Episode"}
+              </Button>
               <Button
                 variant="danger"
                 size="sm"
                 icon={<Trash2 size={13} />}
                 onClick={() => setConfirmDelete(true)}
               >
-                Delete Episode
+                Delete
               </Button>
             </div>
           </div>
@@ -516,6 +530,7 @@ export function Library() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
+  const { loadEpisode } = useEpisodeStore();
 
   const { data: episodes = [], isLoading } = useQuery({
     queryKey: ["episodes"],
@@ -528,6 +543,37 @@ export function Library() {
       queryClient.invalidateQueries({ queryKey: ["episodes"] });
     },
   });
+
+  const handleContinueEpisode = async (ep: EpisodeRow) => {
+    // Convert DB row to Episode type
+    const episode: Episode = {
+      id: ep.id,
+      episode_number: ep.episode_number ?? undefined,
+      title: ep.title,
+      recording_date: ep.recording_date ?? undefined,
+      guest_names: ep.guest_names ? JSON.parse(ep.guest_names) : undefined,
+      tags: ep.tags ? JSON.parse(ep.tags) : undefined,
+      original_video_path: ep.original_video_path ?? undefined,
+      enhanced_video_path: ep.enhanced_video_path ?? undefined,
+      status: ep.status as Episode["status"],
+      created_at: ep.created_at,
+      updated_at: ep.updated_at,
+    };
+
+    // Load show notes if they exist
+    let showNotes = "";
+    try {
+      const notes = await getShowNotes(ep.id);
+      if (notes.length > 0) {
+        showNotes = notes[0].edited_content || notes[0].generated_content || "";
+      }
+    } catch {
+      // ignore
+    }
+
+    loadEpisode(episode, showNotes);
+    navigate("/new-episode");
+  };
 
   const filteredEpisodes = episodes.filter((ep) =>
     ep.title.toLowerCase().includes(searchQuery.toLowerCase())
@@ -737,6 +783,7 @@ export function Library() {
               key={episode.id}
               episode={episode}
               onDelete={(id) => deleteMutation.mutate(id)}
+              onContinue={handleContinueEpisode}
             />
           ))}
         </div>

@@ -65,6 +65,7 @@ interface EpisodeState {
   setProcessing: (processing: boolean) => void;
   setProgress: (progress: number, eta?: string) => void;
   resetWizard: () => void;
+  loadEpisode: (episode: Episode, showNotes?: string) => void;
 }
 
 const initialState = {
@@ -94,4 +95,42 @@ export const useEpisodeStore = create<EpisodeState>((set) => ({
   setProgress: (progress, eta) =>
     set({ processingProgress: progress, processingEta: eta || "" }),
   resetWizard: () => set(initialState),
+  loadEpisode: (episode, showNotes) => {
+    // Determine which step to resume at based on episode status
+    let step: WizardStep = "import";
+    if (episode.status === "draft" && episode.original_video_path) {
+      step = "enhance";
+    }
+    if (episode.status === "enhanced" || episode.enhanced_video_path) {
+      step = "extract";
+    }
+    if (episode.status === "extracted") {
+      step = "show-notes";
+    }
+    if (episode.status === "published") {
+      step = "review";
+    }
+
+    set({
+      currentStep: step,
+      currentEpisode: episode,
+      videoInfo: episode.original_video_path
+        ? {
+            // Minimal info for resumed episodes — probe will fill in details
+            duration_seconds: 0,
+            duration_display: "—",
+            video_codec: "—",
+            audio_codec: "—",
+            resolution: "—",
+            file_size_bytes: 0,
+            file_size_display: "—",
+          }
+        : null,
+      showNotesContent: showNotes || "",
+      showNotesEdited: showNotes || "",
+      isProcessing: false,
+      processingProgress: 0,
+      processingEta: "",
+    });
+  },
 }));
