@@ -64,17 +64,22 @@ pub async fn enhance_audio(
 
     // Read output for progress
     use tauri_plugin_shell::process::CommandEvent;
+    let mut progress_acc = ffmpeg::ProgressAccumulator::default();
     while let Some(event) = rx.recv().await {
         match event {
             CommandEvent::Stdout(line) => {
                 let line_str = String::from_utf8_lossy(&line);
-                if let Some(progress) = ffmpeg::parse_progress(&line_str, total_duration) {
-                    let _ = app.emit("enhancement-progress", &progress);
+                // -progress pipe:1 sends one key=value per line
+                for sub_line in line_str.lines() {
+                    if let Some(progress) = progress_acc.feed(sub_line, total_duration) {
+                        let _ = app.emit("enhancement-progress", &progress);
+                    }
                 }
             }
             CommandEvent::Stderr(line) => {
                 let line_str = String::from_utf8_lossy(&line);
-                if let Some(progress) = ffmpeg::parse_progress(&line_str, total_duration) {
+                // Also check stderr for the single-line progress format
+                if let Some(progress) = ffmpeg::parse_progress_stderr(&line_str, total_duration) {
                     let _ = app.emit("enhancement-progress", &progress);
                 }
             }

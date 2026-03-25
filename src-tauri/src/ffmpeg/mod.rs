@@ -134,15 +134,76 @@ pub fn build_filter_chain(preset: &EnhancementPreset) -> String {
     filters.join(",")
 }
 
-/// Parse FFmpeg progress from stderr line
-pub fn parse_progress(line: &str, total_duration: f64) -> Option<ProcessingProgress> {
+/// Accumulator for FFmpeg -progress pipe:1 output, which sends one key=value per line
+#[derive(Default)]
+pub struct ProgressAccumulator {
+    pub out_time: Option<String>,
+    pub speed: Option<String>,
+}
+
+impl ProgressAccumulator {
+    /// Feed a line from FFmpeg stdout (-progress pipe:1 format).
+    /// Returns Some(ProcessingProgress) when a complete progress block is ready.
+    pub fn feed(&mut self, line: &str, total_duration: f64) -> Option<ProcessingProgress> {
+        let line = line.trim();
+
+        if let Some(val) = line.strip_prefix("out_time=") {
+            self.out_time = Some(val.to_string());
+        } else if let Some(val) = line.strip_prefix("speed=") {
+            self.speed = Some(val.trim().to_string());
+        } else if line.starts_with("progress=") {
+            // End of a progress block — emit if we have time data
+            let result = self.build_progress(total_duration);
+            self.out_time = None;
+            self.speed = None;
+            return result;
+        }
+
+        None
+    }
+
+    fn build_progress(&self, total_duration: f64) -> Option<ProcessingProgress> {
+        let time_str = self.out_time.as_ref()?;
+        let time_seconds = parse_time_to_seconds(time_str)?;
+        let speed = self.speed.clone().unwrap_or_else(|| "N/A".to_string());
+
+        let percent = if total_duration > 0.0 {
+            (time_seconds / total_duration * 100.0).min(100.0)
+        } else {
+            0.0
+        };
+
+        let speed_multiplier: f64 = speed.trim_end_matches('x').parse().unwrap_or(0.0);
+        let remaining = total_duration - time_seconds;
+        let eta_seconds = if speed_multiplier > 0.0 {
+            Some(remaining / speed_multiplier)
+        } else {
+            None
+        };
+
+        let hours = (time_seconds / 3600.0) as u64;
+        let minutes = ((time_seconds % 3600.0) / 60.0) as u64;
+        let secs = (time_seconds % 60.0) as u64;
+        let time_processed = format!("{:02}:{:02}:{:02}", hours, minutes, secs);
+
+        Some(ProcessingProgress {
+            percent,
+            time_processed,
+            speed,
+            eta_seconds,
+        })
+    }
+}
+
+/// Parse FFmpeg progress from stderr (single-line format: "time=XX speed=XX")
+pub fn parse_progress_stderr(line: &str, total_duration: f64) -> Option<ProcessingProgress> {
     if !line.contains("time=") {
         return None;
     }
 
     let time = extract_value(line, "time=")?;
     let time_seconds = parse_time_to_seconds(&time)?;
-    let speed = extract_value(line, "speed=").unwrap_or_else(|| "0x".to_string());
+    let speed = extract_value(line, "speed=").unwrap_or_else(|| "N/A".to_string());
 
     let percent = if total_duration > 0.0 {
         (time_seconds / total_duration * 100.0).min(100.0)
@@ -150,7 +211,7 @@ pub fn parse_progress(line: &str, total_duration: f64) -> Option<ProcessingProgr
         0.0
     };
 
-    let speed_multiplier: f64 = speed.trim_end_matches('x').parse().unwrap_or(1.0);
+    let speed_multiplier: f64 = speed.trim_end_matches('x').parse().unwrap_or(0.0);
     let remaining = total_duration - time_seconds;
     let eta_seconds = if speed_multiplier > 0.0 {
         Some(remaining / speed_multiplier)
