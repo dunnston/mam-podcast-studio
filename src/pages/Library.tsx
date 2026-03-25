@@ -530,7 +530,7 @@ export function Library() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
-  const { loadEpisode } = useEpisodeStore();
+  const { loadEpisode, resetWizard } = useEpisodeStore();
 
   const { data: episodes = [], isLoading } = useQuery({
     queryKey: ["episodes"],
@@ -619,7 +619,7 @@ export function Library() {
           variant="primary"
           size="md"
           icon={<PlusCircle size={15} />}
-          onClick={() => navigate("/new-episode")}
+          onClick={() => { resetWizard(); navigate("/new-episode"); }}
         >
           New Episode
         </Button>
@@ -749,7 +749,7 @@ export function Library() {
             <Button
               variant="primary"
               icon={<PlusCircle size={15} />}
-              onClick={() => navigate("/new-episode")}
+              onClick={() => { resetWizard(); navigate("/new-episode"); }}
             >
               Create First Episode
             </Button>
