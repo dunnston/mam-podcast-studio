@@ -188,7 +188,7 @@ impl CleanvoiceClient {
     }
 
     /// Step 1: Request a signed upload URL from Cleanvoice
-    /// POST /v2/uploads { "filename": "...", "content_type": "..." }
+    /// POST /v2/upload { "filename": "...", "content_type": "..." }
     pub async fn request_upload(&self, filename: &str, content_type: &str) -> Result<UploadResponse> {
         let body = serde_json::json!({
             "filename": filename,
@@ -197,7 +197,7 @@ impl CleanvoiceClient {
 
         let resp = self
             .http
-            .post(format!("{}/uploads", BASE_URL))
+            .post(format!("{}/upload", BASE_URL))
             .header("X-API-Key", &self.api_key)
             .header("Content-Type", "application/json")
             .json(&body)

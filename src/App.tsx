@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Routes, Route } from "react-router-dom";
 import { Sidebar } from "./components/Sidebar";
 import { Dashboard } from "./pages/Dashboard";
@@ -5,9 +6,23 @@ import { NewEpisode } from "./pages/NewEpisode";
 import { Library } from "./pages/Library";
 import { Settings } from "./pages/Settings";
 import { useUIStore } from "./stores/uiStore";
+import { useSettingsStore } from "./stores/settingsStore";
+import { getAllSettings } from "./lib/database";
 
 export default function App() {
   const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed);
+  const loadSettings = useSettingsStore((s) => s.loadSettings);
+
+  // Load settings from SQLite on app start
+  useEffect(() => {
+    getAllSettings()
+      .then((settings) => {
+        loadSettings(settings);
+      })
+      .catch((err) => {
+        console.error("Failed to load settings:", err);
+      });
+  }, [loadSettings]);
 
   return (
     <div className="flex h-full w-full overflow-hidden bg-charcoal">
