@@ -135,6 +135,7 @@ export function Settings() {
   const [autoIncrement, setAutoIncrement] = useState(store.autoIncrementEpisode);
   const [claudeKey, setClaudeKey] = useState(store.claudeApiKey);
   const [cleanvoiceKey, setCleanvoiceKey] = useState(store.aiEnhancementApiKey);
+  const [removeBgKey, setRemoveBgKey] = useState(store.removeBgApiKey);
   const [podbeanClientId, setPodbeanClientId] = useState(store.podbeanClientId);
   const [podbeanClientSecret, setPodbeanClientSecret] = useState(store.podbeanClientSecret);
   const [youtubeClientId, setYoutubeClientId] = useState(store.youtubeClientId);
@@ -167,6 +168,7 @@ export function Settings() {
       setAutoIncrement(settings.autoIncrementEpisode !== "false");
       setClaudeKey(settings.claudeApiKey || "");
       setCleanvoiceKey(settings.aiEnhancementApiKey || "");
+      setRemoveBgKey(settings.removeBgApiKey || "");
       setPodbeanClientId(settings.podbeanClientId || "");
       setPodbeanClientSecret(settings.podbeanClientSecret || "");
       setYoutubeClientId(settings.youtubeClientId || "");
@@ -567,6 +569,43 @@ export function Settings() {
                 <XCircle size={13} /> Connection failed. Check your API key.
               </p>
             )}
+          </div>
+
+          {/* remove.bg API Key */}
+          <div style={settingRowStyle}>
+            <p style={labelStyle}>remove.bg API Key</p>
+            <p style={descStyle}>
+              For automatic background removal in thumbnail creation.{" "}
+              <a
+                href="https://www.remove.bg/api"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: "var(--color-sage)", textDecoration: "underline" }}
+              >
+                Get your API key
+              </a>
+            </p>
+            <div style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}>
+              <div style={{ flex: 1 }}>
+                <PasswordInput
+                  value={removeBgKey}
+                  onChange={(e) => setRemoveBgKey(e.target.value)}
+                  placeholder="Enter your remove.bg API key"
+                />
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={async () => {
+                  store.setRemoveBgApiKey(removeBgKey);
+                  await saveSetting("removeBgApiKey", removeBgKey);
+                }}
+                disabled={!removeBgKey}
+                icon={saved.removeBgApiKey ? <CheckCircle2 size={13} /> : <Save size={13} />}
+              >
+                {saved.removeBgApiKey ? "Saved!" : "Save"}
+              </Button>
+            </div>
           </div>
 
           {/* Podbean */}

@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p binaries)",
+      "Bash(touch binaries/ffmpeg-x86_64-pc-windows-msvc.exe binaries/ffprobe-x86_64-pc-windows-msvc.exe)",
+      "Bash(rm binaries/ffmpeg-x86_64-pc-windows-msvc.exe binaries/ffprobe-x86_64-pc-windows-msvc.exe)",
+      "Bash(rmdir binaries:*)"
+    ]
+  }
+}

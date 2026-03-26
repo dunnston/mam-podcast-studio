@@ -4,6 +4,7 @@ import { ImportStep } from "./steps/ImportStep";
 import { EnhanceStep } from "./steps/EnhanceStep";
 import { ExtractStep } from "./steps/ExtractStep";
 import { ShowNotesStep } from "./steps/ShowNotesStep";
+import { ThumbnailStep } from "./steps/ThumbnailStep";
 import { ReviewStep } from "./steps/ReviewStep";
 import { PublishStep } from "./steps/PublishStep";
 import { Check } from "lucide-react";
@@ -18,7 +19,8 @@ const STEPS: StepConfig[] = [
   { id: "import", label: "Import Video", shortLabel: "Import" },
   { id: "enhance", label: "Enhance Audio", shortLabel: "Enhance" },
   { id: "extract", label: "Extract Audio", shortLabel: "Extract" },
-  { id: "show-notes", label: "Show Notes", shortLabel: "Show Notes" },
+  { id: "show-notes", label: "Show Notes", shortLabel: "Notes" },
+  { id: "thumbnail", label: "Thumbnail", shortLabel: "Cover" },
   { id: "review", label: "Review", shortLabel: "Review" },
   { id: "publish", label: "Publish", shortLabel: "Publish" },
 ];
@@ -28,6 +30,7 @@ const STEP_ORDER: WizardStep[] = [
   "enhance",
   "extract",
   "show-notes",
+  "thumbnail",
   "review",
   "publish",
 ];
@@ -198,6 +201,10 @@ export function NewEpisode() {
         title: "Show Notes",
         description: "Upload a transcript and generate AI-powered show notes.",
       },
+      thumbnail: {
+        title: "Thumbnail",
+        description: "Create a YouTube thumbnail for this episode.",
+      },
       review: {
         title: "Review",
         description: "Review everything before publishing.",
@@ -302,6 +309,7 @@ export function NewEpisode() {
         {currentStep === "enhance" && <EnhanceStep />}
         {currentStep === "extract" && <ExtractStep />}
         {currentStep === "show-notes" && <ShowNotesStep />}
+        {currentStep === "thumbnail" && <ThumbnailStep />}
         {currentStep === "review" && <ReviewStep />}
         {currentStep === "publish" && <PublishStep />}
       </div>

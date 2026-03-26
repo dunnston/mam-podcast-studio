@@ -9,6 +9,7 @@ interface SettingsState {
   // API keys
   claudeApiKey: string;
   aiEnhancementApiKey: string;
+  removeBgApiKey: string;
   podbeanClientId: string;
   podbeanClientSecret: string;
   youtubeClientId: string;
@@ -30,6 +31,7 @@ interface SettingsState {
   setOutputDirectory: (dir: string) => void;
   setClaudeApiKey: (key: string) => void;
   setAiEnhancementApiKey: (key: string) => void;
+  setRemoveBgApiKey: (key: string) => void;
   setPodbeanClientId: (key: string) => void;
   setPodbeanClientSecret: (key: string) => void;
   setYoutubeClientId: (key: string) => void;
@@ -47,6 +49,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   showNotesDirectory: "",
   claudeApiKey: "",
   aiEnhancementApiKey: "",
+  removeBgApiKey: "",
   podbeanClientId: "",
   podbeanClientSecret: "",
   youtubeClientId: "",
@@ -65,6 +68,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     set({ outputDirectory: dir, extractedAudioDirectory: dir }),
   setClaudeApiKey: (key) => set({ claudeApiKey: key }),
   setAiEnhancementApiKey: (key) => set({ aiEnhancementApiKey: key }),
+  setRemoveBgApiKey: (key) => set({ removeBgApiKey: key }),
   setPodbeanClientId: (key) => set({ podbeanClientId: key }),
   setPodbeanClientSecret: (key) => set({ podbeanClientSecret: key }),
   setYoutubeClientId: (key) => set({ youtubeClientId: key }),
@@ -83,6 +87,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
         settings.extractedAudioDirectory || settings.outputDirectory || "",
       claudeApiKey: settings.claudeApiKey || "",
       aiEnhancementApiKey: settings.aiEnhancementApiKey || "",
+      removeBgApiKey: settings.removeBgApiKey || "",
       podbeanClientId: settings.podbeanClientId || "",
       podbeanClientSecret: settings.podbeanClientSecret || "",
       youtubeClientId: settings.youtubeClientId || "",

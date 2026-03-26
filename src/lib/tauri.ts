@@ -285,6 +285,23 @@ export async function testClaudeApi(apiKey: string): Promise<boolean> {
   return invoke("test_claude_api", { apiKey });
 }
 
+// ─── Thumbnail ──────────────────────────────────────────────────
+
+export async function extractFrame(
+  videoPath: string,
+  timestampSecs: number,
+  outputPath: string
+): Promise<string> {
+  return invoke("extract_frame", { videoPath, timestampSecs, outputPath });
+}
+
+export async function removeBackground(
+  imagePath: string,
+  apiKey: string
+): Promise<string> {
+  return invoke("remove_background", { imagePath, apiKey });
+}
+
 // ─── Events ─────────────────────────────────────────────────────
 
 export function onEnhancementProgress(

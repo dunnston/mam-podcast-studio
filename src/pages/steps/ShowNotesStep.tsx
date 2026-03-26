@@ -646,7 +646,7 @@ export function ShowNotesStep() {
         }}
       >
         <button
-          onClick={() => setCurrentStep("review")}
+          onClick={() => setCurrentStep("thumbnail")}
           style={{
             background: "none",
             border: "none",
@@ -663,7 +663,7 @@ export function ShowNotesStep() {
           variant="primary"
           size="lg"
           icon={<ArrowRight size={16} />}
-          onClick={() => setCurrentStep("review")}
+          onClick={() => setCurrentStep("thumbnail")}
         >
           Continue to Review
         </Button>
