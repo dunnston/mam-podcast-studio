@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   PlusCircle,
   Library,
+  FileText,
   Upload,
   Settings,
   PanelLeftClose,
@@ -24,6 +25,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/" },
   { label: "New Episode", icon: PlusCircle, path: "/new-episode" },
   { label: "Episode Library", icon: Library, path: "/library" },
+  { label: "Show Notes", icon: FileText, path: "/show-notes" },
   {
     label: "Publish",
     icon: Upload,
