@@ -18,9 +18,10 @@ import {
   youtubeUpload,
   onPodbeanProgress,
   onYouTubeProgress,
-  openVideoFile,
+  openImageFile,
 } from "../../lib/tauri";
 import type { PodbeanProgress, YouTubeProgress } from "../../lib/tauri";
+import { getAudioExports } from "../../lib/database";
 
 type PublishStatus = "idle" | "publishing" | "done" | "error";
 
@@ -37,7 +38,6 @@ export function PublishStep() {
   const navigate = useNavigate();
   const {
     currentEpisode,
-    selectedFormats,
     showNotesContent,
     showNotesEdited,
     resetWizard,
@@ -72,22 +72,21 @@ export function PublishStep() {
 
   const [thumbnailPath, setThumbnailPath] = useState<string>("");
   const [youtubePrivacy, setYoutubePrivacy] = useState<string>("private");
+  const [audioPath, setAudioPath] = useState<string>("");
 
-  // Determine which audio file to upload to Podbean
-  const audioDir = settings.extractedAudioDirectory;
-  const episodeName = currentEpisode?.title || "episode";
-  const template = settings.fileNamingTemplate || "MAM-{episode_number}-{title}";
-  const baseName = template
-    .replace("{episode_number}", String(currentEpisode?.episode_number || ""))
-    .replace("{title}", episodeName.replace(/\s+/g, "-").toLowerCase());
-
-  // Prefer mp3, then m4a
-  const preferredFormat = selectedFormats.includes("mp3")
-    ? "mp3"
-    : selectedFormats.includes("m4a")
-    ? "m4a"
-    : selectedFormats[0] || "mp3";
-  const audioPath = audioDir ? `${audioDir}/${baseName}.${preferredFormat}` : "";
+  // Load the actual extracted audio path from the database
+  useEffect(() => {
+    if (!currentEpisode?.id) return;
+    getAudioExports(currentEpisode.id).then((exports) => {
+      if (exports.length === 0) return;
+      // Prefer mp3, then m4a, then whatever is available
+      const preferred =
+        exports.find((e) => e.format === "mp3") ||
+        exports.find((e) => e.format === "m4a") ||
+        exports[0];
+      if (preferred) setAudioPath(preferred.file_path);
+    });
+  }, [currentEpisode?.id]);
 
   // Video path for YouTube
   const videoPath =
@@ -285,7 +284,7 @@ export function PublishStep() {
                   variant="secondary"
                   size="sm"
                   onClick={async () => {
-                    const path = await openVideoFile();
+                    const path = await openImageFile();
                     if (path) setThumbnailPath(path);
                   }}
                 >

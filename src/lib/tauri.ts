@@ -334,6 +334,19 @@ export async function openVideoFile(): Promise<string | null> {
   return result as string | null;
 }
 
+export async function openImageFile(): Promise<string | null> {
+  const result = await open({
+    multiple: false,
+    filters: [
+      {
+        name: "Image",
+        extensions: ["png", "jpg", "jpeg", "webp", "bmp"],
+      },
+    ],
+  });
+  return result as string | null;
+}
+
 export async function openTranscriptFile(): Promise<string | null> {
   const result = await open({
     multiple: false,

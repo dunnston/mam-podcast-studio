@@ -228,22 +228,31 @@ impl YouTubeClient {
         Ok(upload_uri)
     }
 
-    /// Upload the video file to the resumable upload URI
+    /// Upload the video file to the resumable upload URI (streamed to avoid buffering)
     async fn upload_video_bytes(
         &self,
         upload_uri: &str,
         file_path: &Path,
         content_type: &str,
     ) -> Result<VideoResponse> {
-        let file_bytes = tokio::fs::read(file_path)
+        let file = tokio::fs::File::open(file_path)
             .await
-            .context("Failed to read video file")?;
+            .context("Failed to open video file")?;
+        let file_len = file
+            .metadata()
+            .await
+            .context("Failed to read video file metadata")?
+            .len();
+
+        let stream = tokio_util::io::ReaderStream::new(file);
+        let body = reqwest::Body::wrap_stream(stream);
 
         let resp = self
             .http
             .put(upload_uri)
             .header("Content-Type", content_type)
-            .body(file_bytes)
+            .header("Content-Length", file_len.to_string())
+            .body(body)
             .send()
             .await
             .context("Failed to upload video bytes")?;
