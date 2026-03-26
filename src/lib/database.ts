@@ -58,7 +58,8 @@ async function getDb() {
   await db.execute(`
     CREATE TABLE IF NOT EXISTS show_notes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      episode_id INTEGER NOT NULL,
+      episode_id INTEGER,
+      title TEXT,
       transcript_path TEXT,
       generated_content TEXT,
       edited_content TEXT,
@@ -70,6 +71,45 @@ async function getDb() {
       FOREIGN KEY (episode_id) REFERENCES episodes(id) ON DELETE CASCADE
     );
   `);
+
+  // Migration: make episode_id nullable and add title column for standalone show notes.
+  // SQLite doesn't support ALTER COLUMN, so we recreate the table if needed.
+  try {
+    // Check if episode_id is NOT NULL in the existing table
+    const tableInfo: { name: string; notnull: number }[] = await db.select(
+      "PRAGMA table_info(show_notes)"
+    );
+    const episodeIdCol = tableInfo.find((c: { name: string }) => c.name === "episode_id");
+    const hasTitleCol = tableInfo.some((c: { name: string }) => c.name === "title");
+
+    if (episodeIdCol?.notnull === 1 || !hasTitleCol) {
+      await db.execute(`ALTER TABLE show_notes RENAME TO show_notes_old`);
+      await db.execute(`
+        CREATE TABLE show_notes (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          episode_id INTEGER,
+          title TEXT,
+          transcript_path TEXT,
+          generated_content TEXT,
+          edited_content TEXT,
+          template_used TEXT,
+          tokens_used INTEGER,
+          version INTEGER NOT NULL DEFAULT 1,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (episode_id) REFERENCES episodes(id) ON DELETE CASCADE
+        )
+      `);
+      await db.execute(`
+        INSERT INTO show_notes (id, episode_id, transcript_path, generated_content, edited_content, template_used, tokens_used, version, created_at, updated_at)
+        SELECT id, episode_id, transcript_path, generated_content, edited_content, template_used, tokens_used, version, created_at, updated_at
+        FROM show_notes_old
+      `);
+      await db.execute(`DROP TABLE show_notes_old`);
+    }
+  } catch {
+    // Migration already applied or fresh DB — ignore
+  }
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS thumbnails (
@@ -271,8 +311,23 @@ export async function getAudioExports(
 
 // ─── Show Notes ─────────────────────────────────────────────────
 
+export interface ShowNoteRow {
+  id: number;
+  episode_id: number | null;
+  title: string | null;
+  transcript_path: string | null;
+  generated_content: string;
+  edited_content: string;
+  template_used: string;
+  tokens_used: number | null;
+  version: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export async function saveShowNotes(data: {
-  episode_id: number;
+  episode_id?: number;
+  title?: string;
   transcript_path?: string;
   generated_content: string;
   edited_content?: string;
@@ -280,18 +335,23 @@ export async function saveShowNotes(data: {
   tokens_used?: number;
 }): Promise<number> {
   const conn = await getDb();
-  // Get current max version
-  const rows: { max_ver: number | null }[] = await conn.select(
-    "SELECT MAX(version) as max_ver FROM show_notes WHERE episode_id = $1",
-    [data.episode_id]
-  );
-  const version = (rows[0]?.max_ver || 0) + 1;
+
+  // Version by episode_id if present, otherwise by title
+  let version = 1;
+  if (data.episode_id) {
+    const rows: { max_ver: number | null }[] = await conn.select(
+      "SELECT MAX(version) as max_ver FROM show_notes WHERE episode_id = $1",
+      [data.episode_id]
+    );
+    version = (rows[0]?.max_ver || 0) + 1;
+  }
 
   const result = await conn.execute(
-    `INSERT INTO show_notes (episode_id, transcript_path, generated_content, edited_content, template_used, tokens_used, version)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    `INSERT INTO show_notes (episode_id, title, transcript_path, generated_content, edited_content, template_used, tokens_used, version)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
     [
-      data.episode_id,
+      data.episode_id || null,
+      data.title || null,
       data.transcript_path || null,
       data.generated_content,
       data.edited_content || data.generated_content,
@@ -305,21 +365,47 @@ export async function saveShowNotes(data: {
 
 export async function getShowNotes(
   episodeId: number
-): Promise<
-  {
-    id: number;
-    generated_content: string;
-    edited_content: string;
-    tokens_used: number;
-    version: number;
-    created_at: string;
-  }[]
-> {
+): Promise<ShowNoteRow[]> {
   const conn = await getDb();
   return conn.select(
     "SELECT * FROM show_notes WHERE episode_id = $1 ORDER BY version DESC",
     [episodeId]
   );
+}
+
+export async function listAllShowNotes(): Promise<ShowNoteRow[]> {
+  const conn = await getDb();
+  return conn.select(
+    `SELECT sn.*, e.title as episode_title
+     FROM show_notes sn
+     LEFT JOIN episodes e ON sn.episode_id = e.id
+     ORDER BY sn.updated_at DESC`
+  );
+}
+
+export async function getShowNoteById(id: number): Promise<ShowNoteRow | null> {
+  const conn = await getDb();
+  const rows: ShowNoteRow[] = await conn.select(
+    "SELECT * FROM show_notes WHERE id = $1",
+    [id]
+  );
+  return rows[0] || null;
+}
+
+export async function updateShowNoteContent(
+  id: number,
+  editedContent: string
+): Promise<void> {
+  const conn = await getDb();
+  await conn.execute(
+    "UPDATE show_notes SET edited_content = $1, updated_at = datetime('now') WHERE id = $2",
+    [editedContent, id]
+  );
+}
+
+export async function deleteShowNote(id: number): Promise<void> {
+  const conn = await getDb();
+  await conn.execute("DELETE FROM show_notes WHERE id = $1", [id]);
 }
 
 // ─── Thumbnails ────────────────────────────────────────────────

@@ -4,6 +4,7 @@ import { Sidebar } from "./components/Sidebar";
 import { Dashboard } from "./pages/Dashboard";
 import { NewEpisode } from "./pages/NewEpisode";
 import { Library } from "./pages/Library";
+import { ShowNotes } from "./pages/ShowNotes";
 import { Settings } from "./pages/Settings";
 import { useUIStore } from "./stores/uiStore";
 import { useSettingsStore } from "./stores/settingsStore";
@@ -38,6 +39,7 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/new-episode" element={<NewEpisode />} />
           <Route path="/library" element={<Library />} />
+          <Route path="/show-notes" element={<ShowNotes />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>
       </main>
