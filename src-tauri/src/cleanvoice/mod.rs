@@ -137,6 +137,7 @@ pub struct EditResult {
     /// Edit statistics (e.g., {"MOUTH_SOUND": 7, "FILLER_SOUND": 1})
     pub statistics: Option<serde_json::Value>,
     /// Transcript (if transcription was enabled)
+    #[serde(alias = "transcription")]
     pub transcript: Option<serde_json::Value>,
     /// Summary (if summarize was enabled)
     #[serde(alias = "summarization")]

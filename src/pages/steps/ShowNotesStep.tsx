@@ -199,7 +199,7 @@ export function ShowNotesStep() {
       }
     } catch (err) {
       if (!isStale()) {
-        setError(err instanceof Error ? err.message : "Generation failed.");
+        setError(err instanceof Error ? err.message : typeof err === "string" ? err : "Generation failed.");
       }
     } finally {
       if (!isStale()) {
@@ -665,7 +665,7 @@ export function ShowNotesStep() {
           icon={<ArrowRight size={16} />}
           onClick={() => setCurrentStep("thumbnail")}
         >
-          Continue to Review
+          Continue to Cover Design
         </Button>
       </div>
     </div>

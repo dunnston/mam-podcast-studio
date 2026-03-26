@@ -89,7 +89,7 @@ interface EpisodeState {
   setProcessing: (processing: boolean) => void;
   setProgress: (progress: number, eta?: string) => void;
   resetWizard: () => void;
-  loadEpisode: (episode: Episode, showNotes?: string) => void;
+  loadEpisode: (episode: Episode, showNotes?: string, transcript?: string) => void;
 }
 
 const initialState = {
@@ -126,7 +126,7 @@ export const useEpisodeStore = create<EpisodeState>((set) => ({
   setProgress: (progress, eta) =>
     set({ processingProgress: progress, processingEta: eta || "" }),
   resetWizard: () => set((state) => ({ ...initialState, wizardSessionId: state.wizardSessionId + 1 })),
-  loadEpisode: (episode, showNotes) => {
+  loadEpisode: (episode, showNotes, transcript) => {
     // Determine which step to resume at based on episode status
     let step: WizardStep = "import";
     if (episode.status === "draft" && episode.original_video_path) {
@@ -159,7 +159,7 @@ export const useEpisodeStore = create<EpisodeState>((set) => ({
         : null,
       showNotesContent: showNotes || "",
       showNotesEdited: showNotes || "",
-      cleanvoiceTranscript: "",
+      cleanvoiceTranscript: transcript || "",
       isProcessing: false,
       processingProgress: 0,
       processingEta: "",
