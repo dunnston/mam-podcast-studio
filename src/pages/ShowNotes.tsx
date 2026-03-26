@@ -195,7 +195,27 @@ export function ShowNotes() {
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    await handleBrowseTranscript();
+
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    if (!ext || !["txt", "md", "docx", "pdf"].includes(ext)) {
+      setError("Unsupported file type. Please use TXT, DOCX, PDF, or MD.");
+      return;
+    }
+
+    setIsLoadingTranscript(true);
+    setError(null);
+    try {
+      const text = await file.text();
+      setTranscriptPath(file.name);
+      setTranscriptText(text);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to read dropped file.");
+    } finally {
+      setIsLoadingTranscript(false);
+    }
   };
 
   const handleGenerate = async () => {
@@ -236,6 +256,38 @@ export function ShowNotes() {
     } catch (err) {
       console.error("Failed to save show notes to DB:", err);
       setError("Show notes were generated but failed to save. You can copy the content above.");
+    }
+  };
+
+  const handleRegenerate = async () => {
+    if (!transcriptText || !claudeApiKey || !activeNoteId) return;
+
+    setIsGenerating(true);
+    setError(null);
+
+    let result: GenerationResult;
+    try {
+      result = await generateShowNotes(
+        claudeApiKey,
+        transcriptText,
+        DEFAULT_SYSTEM_PROMPT
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Generation failed.");
+      setIsGenerating(false);
+      return;
+    }
+
+    setGenerationResult(result);
+    setEditedContent(result.content);
+    setIsGenerating(false);
+
+    try {
+      await updateShowNoteContent(activeNoteId, result.content);
+      queryClient.invalidateQueries({ queryKey: ["showNotes"] });
+    } catch (err) {
+      console.error("Failed to save regenerated show notes:", err);
+      setError("Show notes were regenerated but failed to save. You can copy the content above.");
     }
   };
 
@@ -990,29 +1042,57 @@ export function ShowNotes() {
       </p>
 
       {/* Re-generate from transcript section */}
-      {transcriptPath && (
-        <div style={{ marginTop: "24px" }}>
-          <p
-            style={{
-              fontFamily: "var(--font-body)",
-              fontSize: "11px",
-              fontWeight: "600",
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              color: "var(--color-text-muted)",
-              marginBottom: "8px",
-            }}
-          >
-            Regenerate
-          </p>
-          <p style={{ fontFamily: "var(--font-body)", fontSize: "12px", color: "var(--color-text-muted)", marginBottom: "8px" }}>
-            Upload a new transcript to regenerate these show notes.
-          </p>
+      <div style={{ marginTop: "24px" }}>
+        <p
+          style={{
+            fontFamily: "var(--font-body)",
+            fontSize: "11px",
+            fontWeight: "600",
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+            color: "var(--color-text-muted)",
+            marginBottom: "8px",
+          }}
+        >
+          Regenerate
+        </p>
+        <p style={{ fontFamily: "var(--font-body)", fontSize: "12px", color: "var(--color-text-muted)", marginBottom: "12px" }}>
+          Upload a transcript to regenerate these show notes with AI.
+        </p>
+        {transcriptText ? (
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1, minWidth: 0 }}>
+              <FileText size={14} style={{ color: "var(--color-sage)", flexShrink: 0 }} />
+              <span style={{ fontFamily: "var(--font-body)", fontSize: "12px", color: "var(--color-cream)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {transcriptPath?.split(/[\\/]/).pop() || "Transcript"}
+              </span>
+              <span style={{ fontFamily: "var(--font-body)", fontSize: "11px", color: "var(--color-text-muted)" }}>
+                ({transcriptText.length.toLocaleString()} chars)
+              </span>
+              <button
+                onClick={() => { setTranscriptText(""); setTranscriptPath(null); }}
+                style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "var(--font-body)", fontSize: "11px", color: "var(--color-sage)", textDecoration: "underline" }}
+              >
+                Change
+              </button>
+            </div>
+            <Button
+              variant="primary"
+              size="sm"
+              icon={isGenerating ? undefined : <Sparkles size={13} />}
+              loading={isGenerating}
+              onClick={handleRegenerate}
+              disabled={!claudeApiKey}
+            >
+              {isGenerating ? "Generating..." : "Regenerate"}
+            </Button>
+          </div>
+        ) : (
           <Button variant="ghost" size="sm" icon={<UploadCloud size={13} />} onClick={handleBrowseTranscript}>
             Upload Transcript
           </Button>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Error */}
       {error && (
