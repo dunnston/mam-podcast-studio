@@ -7,8 +7,11 @@ import {
   FileText,
   FolderOpen,
   ArrowRight,
+  Play,
+  Volume2,
 } from "lucide-react";
 import { useEpisodeStore } from "../../stores/episodeStore";
+import { useSettingsStore } from "../../stores/settingsStore";
 
 interface SummaryCardProps {
   title: string;
@@ -114,11 +117,22 @@ export function ReviewStep() {
     showNotesEdited,
     setCurrentStep,
   } = useEpisodeStore();
+  const { extractedAudioDirectory } = useSettingsStore();
 
   const hasImport = Boolean(currentEpisode?.original_video_path && videoInfo);
   const hasEnhancement = Boolean(currentEpisode?.enhanced_video_path);
   const hasExtraction = selectedFormats.length > 0;
   const hasShowNotes = Boolean(showNotesContent || showNotesEdited);
+
+  // Video to preview: enhanced if available, otherwise original
+  const videoPath =
+    currentEpisode?.enhanced_video_path || currentEpisode?.original_video_path;
+
+  // Build audio file paths the same way PublishStep does
+  const audioBaseName = currentEpisode?.original_video_path
+    ?.split(/[\\/]/)
+    .pop()
+    ?.replace(/\.[^.]+$/, "");
 
   const notesContent = showNotesEdited || showNotesContent;
   const wordCount = notesContent
@@ -165,6 +179,63 @@ export function ReviewStep() {
             : ""}
         </p>
       </div>
+
+      {/* Video Preview */}
+      {videoPath && (
+        <div
+          style={{
+            backgroundColor: "var(--color-surface)",
+            border: "1px solid var(--color-border)",
+            borderRadius: "12px",
+            overflow: "hidden",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              padding: "12px 20px",
+              borderBottom: "1px solid var(--color-border)",
+            }}
+          >
+            <Play size={14} style={{ color: "var(--color-sage)" }} />
+            <span
+              style={{
+                fontFamily: "var(--font-body)",
+                fontSize: "13px",
+                fontWeight: "600",
+                color: "var(--color-cream)",
+              }}
+            >
+              Video Preview
+            </span>
+            <span
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: "11px",
+                color: "var(--color-text-muted)",
+                marginLeft: "auto",
+              }}
+            >
+              {currentEpisode?.enhanced_video_path ? "Enhanced" : "Original"}
+            </span>
+          </div>
+          <div style={{ padding: "12px" }}>
+            <video
+              src={videoPath}
+              controls
+              style={{
+                width: "100%",
+                maxHeight: "320px",
+                borderRadius: "8px",
+                backgroundColor: "#000",
+                display: "block",
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Summary cards */}
       <SummaryCard
@@ -238,24 +309,74 @@ export function ReviewStep() {
         completed={hasExtraction}
       >
         {hasExtraction ? (
-          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-            {selectedFormats.map((fmt) => (
-              <span
-                key={fmt}
-                style={{
-                  padding: "3px 10px",
-                  backgroundColor: "rgba(122, 139, 111, 0.15)",
-                  border: "1px solid rgba(122, 139, 111, 0.25)",
-                  borderRadius: "6px",
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "12px",
-                  color: "var(--color-sage-light)",
-                  textTransform: "uppercase",
-                }}
-              >
-                {fmt}
-              </span>
-            ))}
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              {selectedFormats.map((fmt) => (
+                <span
+                  key={fmt}
+                  style={{
+                    padding: "3px 10px",
+                    backgroundColor: "rgba(122, 139, 111, 0.15)",
+                    border: "1px solid rgba(122, 139, 111, 0.25)",
+                    borderRadius: "6px",
+                    fontFamily: "var(--font-mono)",
+                    fontSize: "12px",
+                    color: "var(--color-sage-light)",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  {fmt}
+                </span>
+              ))}
+            </div>
+            {extractedAudioDirectory && audioBaseName && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                {selectedFormats.map((fmt) => {
+                  const audioPath = `${extractedAudioDirectory}/${audioBaseName}.${fmt}`;
+                  return (
+                    <div
+                      key={fmt}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "10px",
+                        padding: "10px 14px",
+                        backgroundColor: "var(--color-charcoal)",
+                        borderRadius: "8px",
+                      }}
+                    >
+                      <Volume2
+                        size={14}
+                        style={{ color: "var(--color-sage)", flexShrink: 0 }}
+                      />
+                      <span
+                        style={{
+                          fontFamily: "var(--font-mono)",
+                          fontSize: "11px",
+                          fontWeight: "600",
+                          textTransform: "uppercase",
+                          color: "var(--color-text-muted)",
+                          minWidth: "32px",
+                          flexShrink: 0,
+                        }}
+                      >
+                        {fmt}
+                      </span>
+                      <audio
+                        src={audioPath}
+                        controls
+                        preload="metadata"
+                        style={{
+                          flex: 1,
+                          height: "32px",
+                          minWidth: 0,
+                        }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         ) : (
           <p
