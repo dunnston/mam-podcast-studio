@@ -143,9 +143,14 @@ export interface CleanvoiceAuthInfo {
   credits?: number;
 }
 
+export interface CleanvoiceEnhanceResult {
+  output_path: string;
+  transcript: string | null;
+}
+
 export async function cleanvoiceEnhance(
   request: CleanvoiceEnhanceRequest
-): Promise<string> {
+): Promise<CleanvoiceEnhanceResult> {
   return invoke("cleanvoice_enhance", { request });
 }
 

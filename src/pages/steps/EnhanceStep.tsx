@@ -218,6 +218,11 @@ export function EnhanceStep() {
     onCleanvoiceTranscript((transcript) => {
       if (!active) return;
       setCleanvoiceTranscript(transcript);
+      // Persist to DB so it survives navigation/session changes
+      const episodeId = useEpisodeStore.getState().currentEpisode?.id;
+      if (episodeId) {
+        updateEpisode(episodeId, { transcript }).catch(console.error);
+      }
     }).then((unlisten) => {
       unlistenTranscriptRef.current = unlisten;
     });
@@ -282,12 +287,10 @@ export function EnhanceStep() {
         setCleanvoiceMessage("Starting Cleanvoice AI...");
 
         const cvConfig = getSelectedCvConfig();
-        const isEditing = hasEditingFeatures();
 
-        // Determine output: if editing, Cleanvoice returns video; if enhance-only, returns audio
-        const cvOutputPath = isEditing
-          ? `${enhancedVideoDirectory}/${episodeName}-cv-enhanced.mp4`
-          : `${enhancedVideoDirectory}/${episodeName}-cv-enhanced.m4a`;
+        // Cleanvoice always returns video when input is video
+        // (enhance-only mode: extracts audio, enhances, muxes back into original video)
+        const cvOutputPath = `${enhancedVideoDirectory}/${episodeName}-cv-enhanced.mp4`;
 
         const cleanResult = await cleanvoiceEnhance({
           api_key: aiEnhancementApiKey,
@@ -305,35 +308,40 @@ export function EnhanceStep() {
           hesitations: cvConfig.hesitations,
         });
 
-        audioForMastering = cleanResult;
+        audioForMastering = cleanResult.output_path;
         setCleanvoiceMessage("AI enhancement complete!");
+
+        // Save transcript directly from the command result (not relying on events)
+        if (cleanResult.transcript) {
+          setCleanvoiceTranscript(cleanResult.transcript);
+          if (currentEpisode?.id) {
+            updateEpisode(currentEpisode.id, { transcript: cleanResult.transcript }).catch(console.error);
+          }
+        }
       }
 
       // ── Stage 2: FFmpeg Broadcast Mastering ──────────────────
+      let outputPath: string;
       if (enableMastering) {
         setCurrentStage("mastering");
         setProgress(0);
         setProgressDetail(null);
 
-        const result = await enhanceAudio(
+        outputPath = await enhanceAudio(
           audioForMastering,
           finalOutputPath,
           enhancementPreset,
           videoInfo.duration_seconds
         );
-
-        setEnhancedPath(result);
       } else {
         // No mastering — Cleanvoice output IS the final output
-        // If Cleanvoice returned a video (editing mode), we're done
-        // If Cleanvoice returned audio (enhance-only), the mux already happened in Rust
-        setEnhancedPath(audioForMastering);
+        // Cleanvoice always muxes enhanced audio back into video, so this is a video file
+        outputPath = audioForMastering;
       }
 
       // Bail if the wizard was reset while we were processing
       if (isStale()) return;
 
-      const outputPath = enhancedPath || finalOutputPath;
       setEnhancedPath(outputPath);
       setCompleted(true);
 

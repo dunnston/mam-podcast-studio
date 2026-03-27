@@ -162,7 +162,7 @@ export function ExtractStep() {
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Extraction failed.");
+      setError(err instanceof Error ? err.message : typeof err === "string" ? err : "Extraction failed.");
     } finally {
       setIsExtracting(false);
     }

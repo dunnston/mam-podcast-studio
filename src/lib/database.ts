@@ -21,6 +21,7 @@ async function getDb() {
       tags TEXT,
       original_video_path TEXT,
       enhanced_video_path TEXT,
+      transcript TEXT,
       status TEXT NOT NULL DEFAULT 'draft',
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -111,6 +112,13 @@ async function getDb() {
     // Migration already applied or fresh DB — ignore
   }
 
+  // Migration: add transcript column to episodes
+  try {
+    await db.execute(`ALTER TABLE episodes ADD COLUMN transcript TEXT`);
+  } catch {
+    // Column already exists — ignore
+  }
+
   await db.execute(`
     CREATE TABLE IF NOT EXISTS thumbnails (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -146,6 +154,7 @@ export interface EpisodeRow {
   tags: string | null;
   original_video_path: string | null;
   enhanced_video_path: string | null;
+  transcript: string | null;
   status: string;
   created_at: string;
   updated_at: string;
@@ -195,6 +204,7 @@ export async function updateEpisode(
     title: string;
     status: string;
     enhanced_video_path: string;
+    transcript: string;
     episode_number: number;
     recording_date: string;
     guest_names: string[];
@@ -217,6 +227,10 @@ export async function updateEpisode(
   if (data.enhanced_video_path !== undefined) {
     sets.push(`enhanced_video_path = $${paramIndex++}`);
     values.push(data.enhanced_video_path);
+  }
+  if (data.transcript !== undefined) {
+    sets.push(`transcript = $${paramIndex++}`);
+    values.push(data.transcript);
   }
   if (data.episode_number !== undefined) {
     sets.push(`episode_number = $${paramIndex++}`);

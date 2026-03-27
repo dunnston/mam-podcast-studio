@@ -1,3 +1,4 @@
+import { useRef, useState, useEffect } from "react";
 import {
   CheckCircle2,
   Circle,
@@ -11,8 +12,14 @@ import {
   Play,
   Volume2,
 } from "lucide-react";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { useEpisodeStore } from "../../stores/episodeStore";
-import { useSettingsStore } from "../../stores/settingsStore";
+import { getAudioExports } from "../../lib/database";
+
+/** Convert a local file path to a URL served by the Tauri custom "media" protocol */
+function assetUrl(filePath: string): string {
+  return convertFileSrc(filePath, "media");
+}
 
 interface SummaryCardProps {
   title: string;
@@ -120,23 +127,44 @@ export function ReviewStep() {
     thumbnailExportedPath,
     setCurrentStep,
   } = useEpisodeStore();
-  const { extractedAudioDirectory } = useSettingsStore();
+  const audioRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
+
+  // Load actual audio export paths from the database (deduplicated by format, latest wins)
+  const [audioExports, setAudioExports] = useState<
+    { id: number; format: string; file_path: string }[]
+  >([]);
+  useEffect(() => {
+    if (!currentEpisode?.id) return;
+    getAudioExports(currentEpisode.id).then((exports) => {
+      // DB returns ordered by created_at DESC, so first per format is latest
+      const seen = new Set<string>();
+      const deduped = exports.filter((e) => {
+        if (seen.has(e.format)) return false;
+        seen.add(e.format);
+        return true;
+      });
+      setAudioExports(deduped);
+    });
+  }, [currentEpisode?.id]);
+
+  // Pause all other audio players when one starts playing
+  const handleAudioPlay = (playingFormat: string) => {
+    audioRefs.current.forEach((el, fmt) => {
+      if (fmt !== playingFormat && !el.paused) {
+        el.pause();
+      }
+    });
+  };
 
   const hasImport = Boolean(currentEpisode?.original_video_path && videoInfo);
   const hasEnhancement = Boolean(currentEpisode?.enhanced_video_path);
-  const hasExtraction = selectedFormats.length > 0;
+  const hasExtraction = selectedFormats.length > 0 || audioExports.length > 0;
   const hasShowNotes = Boolean(showNotesContent || showNotesEdited);
   const hasThumbnail = Boolean(thumbnailExportedPath || (thumbnailConfig && thumbnailConfig.photos.length > 0));
 
   // Video to preview: enhanced if available, otherwise original
   const videoPath =
     currentEpisode?.enhanced_video_path || currentEpisode?.original_video_path;
-
-  // Build audio file paths the same way PublishStep does
-  const audioBaseName = currentEpisode?.original_video_path
-    ?.split(/[\\/]/)
-    .pop()
-    ?.replace(/\.[^.]+$/, "");
 
   const notesContent = showNotesEdited || showNotesContent;
   const wordCount = notesContent
@@ -227,7 +255,7 @@ export function ReviewStep() {
           </div>
           <div style={{ padding: "12px" }}>
             <video
-              src={videoPath}
+              src={assetUrl(videoPath)}
               controls
               style={{
                 width: "100%",
@@ -315,7 +343,10 @@ export function ReviewStep() {
         {hasExtraction ? (
           <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-              {selectedFormats.map((fmt) => (
+              {(audioExports.length > 0
+                ? audioExports.map((e) => e.format)
+                : selectedFormats
+              ).map((fmt) => (
                 <span
                   key={fmt}
                   style={{
@@ -333,52 +364,54 @@ export function ReviewStep() {
                 </span>
               ))}
             </div>
-            {extractedAudioDirectory && audioBaseName && (
+            {audioExports.length > 0 && (
               <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                {selectedFormats.map((fmt) => {
-                  const audioPath = `${extractedAudioDirectory}/${audioBaseName}.${fmt}`;
-                  return (
-                    <div
-                      key={fmt}
+                {audioExports.map((exp) => (
+                  <div
+                    key={exp.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "10px",
+                      padding: "10px 14px",
+                      backgroundColor: "var(--color-charcoal)",
+                      borderRadius: "8px",
+                    }}
+                  >
+                    <Volume2
+                      size={14}
+                      style={{ color: "var(--color-sage)", flexShrink: 0 }}
+                    />
+                    <span
                       style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "10px",
-                        padding: "10px 14px",
-                        backgroundColor: "var(--color-charcoal)",
-                        borderRadius: "8px",
+                        fontFamily: "var(--font-mono)",
+                        fontSize: "11px",
+                        fontWeight: "600",
+                        textTransform: "uppercase",
+                        color: "var(--color-text-muted)",
+                        minWidth: "32px",
+                        flexShrink: 0,
                       }}
                     >
-                      <Volume2
-                        size={14}
-                        style={{ color: "var(--color-sage)", flexShrink: 0 }}
-                      />
-                      <span
-                        style={{
-                          fontFamily: "var(--font-mono)",
-                          fontSize: "11px",
-                          fontWeight: "600",
-                          textTransform: "uppercase",
-                          color: "var(--color-text-muted)",
-                          minWidth: "32px",
-                          flexShrink: 0,
-                        }}
-                      >
-                        {fmt}
-                      </span>
-                      <audio
-                        src={audioPath}
-                        controls
-                        preload="metadata"
-                        style={{
-                          flex: 1,
-                          height: "32px",
-                          minWidth: 0,
-                        }}
-                      />
-                    </div>
-                  );
-                })}
+                      {exp.format}
+                    </span>
+                    <audio
+                      ref={(el) => {
+                        if (el) audioRefs.current.set(exp.format, el);
+                        else audioRefs.current.delete(exp.format);
+                      }}
+                      src={assetUrl(exp.file_path)}
+                      controls
+                      preload="metadata"
+                      onPlay={() => handleAudioPlay(exp.format)}
+                      style={{
+                        flex: 1,
+                        height: "32px",
+                        minWidth: 0,
+                      }}
+                    />
+                  </div>
+                ))}
               </div>
             )}
           </div>

@@ -573,7 +573,7 @@ export function Library() {
       // ignore
     }
 
-    loadEpisode(episode, showNotes);
+    loadEpisode(episode, showNotes, ep.transcript || "");
     navigate("/new-episode");
   };
 

@@ -107,10 +107,20 @@ fn extract_transcript_text(transcript: &serde_json::Value) -> String {
         return s.to_string();
     }
 
-    // Case 2: Object with a "text" field
+    // Case 2: Object with structured transcript data
     if let Some(obj) = transcript.as_object() {
         if let Some(text) = obj.get("text").and_then(|v| v.as_str()) {
             return text.to_string();
+        }
+        // Object with "paragraphs" array (Cleanvoice v2 format)
+        if let Some(paragraphs) = obj.get("paragraphs").and_then(|v| v.as_array()) {
+            let texts: Vec<&str> = paragraphs
+                .iter()
+                .filter_map(|p| p.get("text").and_then(|t| t.as_str()))
+                .collect();
+            if !texts.is_empty() {
+                return texts.join("\n\n");
+            }
         }
         // Object with "segments" array
         if let Some(segments) = obj.get("segments").and_then(|v| v.as_array()) {
@@ -143,11 +153,17 @@ fn extract_transcript_text(transcript: &serde_json::Value) -> String {
     String::new()
 }
 
+#[derive(serde::Serialize, Clone)]
+pub struct CleanvoiceEnhanceResult {
+    pub output_path: String,
+    pub transcript: Option<String>,
+}
+
 #[tauri::command]
 pub async fn cleanvoice_enhance(
     app: AppHandle,
     request: CleanvoiceEnhanceRequest,
-) -> Result<String, String> {
+) -> Result<CleanvoiceEnhanceResult, String> {
     // Reset cancellation flag
     {
         let mut cancelled = CANCELLED.lock().unwrap();
@@ -308,22 +324,30 @@ pub async fn cleanvoice_enhance(
         let _ = tokio::fs::remove_file(&temp_audio).await;
     }
 
-    // Emit stats if available
+    // Extract transcript and stats from result
+    let mut transcript_text_result: Option<String> = None;
     if let Some(ref edit_result) = result.result {
         let _ = app.emit("cleanvoice-stats", edit_result);
 
-        // Emit transcript if Cleanvoice returned one
         if let Some(ref transcript) = edit_result.transcript {
-            // Convert transcript JSON to plain text
-            let transcript_text = extract_transcript_text(transcript);
-            if !transcript_text.is_empty() {
-                eprintln!("[Cleanvoice] Emitting transcript ({} chars)", transcript_text.len());
-                let _ = app.emit("cleanvoice-transcript", &transcript_text);
+            let text = extract_transcript_text(transcript);
+            if !text.is_empty() {
+                eprintln!("[Cleanvoice] Transcript extracted ({} chars)", text.len());
+                // Also emit event for backward compat
+                let _ = app.emit("cleanvoice-transcript", &text);
+                transcript_text_result = Some(text);
+            } else {
+                eprintln!("[Cleanvoice] WARNING: transcript field present but extracted text is empty");
             }
+        } else {
+            eprintln!("[Cleanvoice] WARNING: No transcript field in result");
         }
     }
 
-    Ok(request.output_path)
+    Ok(CleanvoiceEnhanceResult {
+        output_path: request.output_path,
+        transcript: transcript_text_result,
+    })
 }
 
 #[tauri::command]
