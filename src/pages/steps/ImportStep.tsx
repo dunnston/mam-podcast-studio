@@ -8,6 +8,7 @@ import {
   Mic2,
   CheckCircle2,
 } from "lucide-react";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { useEpisodeStore } from "../../stores/episodeStore";
 import { openVideoFile, probeVideo } from "../../lib/tauri";
 import { getNextEpisodeNumber, createEpisode } from "../../lib/database";
@@ -476,7 +477,7 @@ export function ImportStep() {
               Preview
             </p>
             <video
-              src={filePath}
+              src={filePath ? convertFileSrc(filePath, "media") : undefined}
               controls
               style={{
                 width: "100%",
