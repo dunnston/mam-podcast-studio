@@ -1,12 +1,13 @@
 use crate::ffmpeg;
 use crate::models::{EnhancementPreset, VideoProbeResult};
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter};
 use tauri_plugin_shell::ShellExt;
 
-// Global handle to the current FFmpeg process for cancellation
-static CURRENT_PROCESS: std::sync::LazyLock<Arc<Mutex<Option<u32>>>> =
-    std::sync::LazyLock::new(|| Arc::new(Mutex::new(None)));
+// Track active FFmpeg processes by job ID for per-job cancellation
+static ACTIVE_PROCESSES: std::sync::LazyLock<Arc<Mutex<HashMap<String, u32>>>> =
+    std::sync::LazyLock::new(|| Arc::new(Mutex::new(HashMap::new())));
 
 #[tauri::command]
 pub async fn probe_video(
@@ -51,15 +52,16 @@ pub async fn enhance_audio(
     let (mut rx, child) = app
         .shell()
         .sidecar("ffmpeg")
-        .expect("failed to create ffmpeg sidecar")
+        .map_err(|e| format!("FFmpeg binary not found. Please reinstall the app: {}", e))?
         .args(&args)
         .spawn()
         .map_err(|e| format!("Failed to spawn FFmpeg: {}", e))?;
 
-    // Store PID for cancellation
+    // Store PID for cancellation using output_path as job ID
+    let job_id = output_path.clone();
     {
-        let mut proc = CURRENT_PROCESS.lock().unwrap_or_else(|e| e.into_inner());
-        *proc = Some(child.pid());
+        let mut procs = ACTIVE_PROCESSES.lock().unwrap_or_else(|e| e.into_inner());
+        procs.insert(job_id.clone(), child.pid());
     }
 
     // Read output for progress
@@ -93,9 +95,9 @@ pub async fn enhance_audio(
             CommandEvent::Terminated(status) => {
                 // Check if this was a cancellation (PID already cleared by cancel_processing)
                 let was_cancelled = {
-                    let mut proc = CURRENT_PROCESS.lock().unwrap_or_else(|e| e.into_inner());
-                    let cancelled = proc.is_none();
-                    *proc = None;
+                    let mut procs = ACTIVE_PROCESSES.lock().unwrap_or_else(|e| e.into_inner());
+                    let cancelled = !procs.contains_key(&job_id);
+                    procs.remove(&job_id);
                     cancelled
                 };
 
@@ -119,24 +121,29 @@ pub async fn enhance_audio(
 
     // Clean up process slot if loop exits without Terminated event
     {
-        let mut proc = CURRENT_PROCESS.lock().unwrap_or_else(|e| e.into_inner());
-        *proc = None;
+        let mut procs = ACTIVE_PROCESSES.lock().unwrap_or_else(|e| e.into_inner());
+        procs.remove(&job_id);
     }
     Err("FFmpeg process ended unexpectedly".to_string())
 }
 
 #[tauri::command]
 pub async fn cancel_processing() -> Result<(), String> {
-    let pid = {
-        let mut proc = CURRENT_PROCESS.lock().unwrap_or_else(|e| e.into_inner());
-        proc.take()
+    let pids: Vec<u32> = {
+        let mut procs = ACTIVE_PROCESSES.lock().unwrap_or_else(|e| e.into_inner());
+        let pids: Vec<u32> = procs.values().copied().collect();
+        procs.clear(); // Clear all so Terminated handler detects cancellation
+        pids
     };
 
-    if let Some(pid) = pid {
+    if pids.is_empty() {
+        return Err("No active processing to cancel".to_string());
+    }
+
+    for pid in pids {
         // Kill the FFmpeg process tree
         #[cfg(target_os = "windows")]
         {
-            // On Windows, use taskkill to kill the process and its children
             let _ = std::process::Command::new("taskkill")
                 .args(["/F", "/T", "/PID", &pid.to_string()])
                 .output();
@@ -144,16 +151,13 @@ pub async fn cancel_processing() -> Result<(), String> {
 
         #[cfg(not(target_os = "windows"))]
         {
-            // On macOS/Linux, send SIGKILL
             let _ = std::process::Command::new("kill")
                 .args(["-9", &pid.to_string()])
                 .output();
         }
-
-        Ok(())
-    } else {
-        Err("No active processing to cancel".to_string())
     }
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -191,7 +195,7 @@ pub async fn preview_enhancement(
     let output = app
         .shell()
         .sidecar("ffmpeg")
-        .expect("failed to create ffmpeg sidecar")
+        .map_err(|e| format!("FFmpeg binary not found. Please reinstall the app: {}", e))?
         .args(&args)
         .output()
         .await

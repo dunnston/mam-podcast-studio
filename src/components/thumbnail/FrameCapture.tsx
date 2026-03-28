@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   Camera,
   Trash2,
@@ -27,8 +27,6 @@ interface FrameCaptureProps {
   onPhotosChange: (photos: string[]) => void;
 }
 
-let nextSlotId = 1;
-
 function parseTimestamp(ts: string): number {
   const parts = ts.split(":").map(Number);
   if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
@@ -37,9 +35,11 @@ function parseTimestamp(ts: string): number {
 }
 
 export function FrameCapture({ videoPath, onPhotosChange }: FrameCaptureProps) {
-  const [slots, setSlots] = useState<FrameSlot[]>([
-    { id: nextSlotId++, timestamp: "00:00:30", rawFrame: null, cutoutFrame: null, isCapturing: false, isRemoving: false, error: null },
-    { id: nextSlotId++, timestamp: "00:01:00", rawFrame: null, cutoutFrame: null, isCapturing: false, isRemoving: false, error: null },
+  const nextSlotIdRef = useRef(1);
+  const nextId = () => nextSlotIdRef.current++;
+  const [slots, setSlots] = useState<FrameSlot[]>(() => [
+    { id: nextId(), timestamp: "00:00:30", rawFrame: null, cutoutFrame: null, isCapturing: false, isRemoving: false, error: null },
+    { id: nextId(), timestamp: "00:01:00", rawFrame: null, cutoutFrame: null, isCapturing: false, isRemoving: false, error: null },
   ]);
   const removeBgApiKey = useSettingsStore((s) => s.removeBgApiKey);
 
@@ -125,7 +125,7 @@ export function FrameCapture({ videoPath, onPhotosChange }: FrameCaptureProps) {
     setSlots((prev) => [
       ...prev,
       {
-        id: nextSlotId++,
+        id: nextId(),
         timestamp: "00:00:00",
         rawFrame: null,
         cutoutFrame: null,

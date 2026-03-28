@@ -193,7 +193,11 @@ impl CleanvoiceClient {
     pub fn new(api_key: &str) -> Self {
         Self {
             api_key: api_key.to_string(),
-            http: reqwest::Client::new(),
+            http: reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(600)) // 10 min for large uploads
+                .connect_timeout(std::time::Duration::from_secs(30))
+                .build()
+                .unwrap_or_else(|_| reqwest::Client::new()),
         }
     }
 

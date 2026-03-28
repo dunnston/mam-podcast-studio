@@ -1,6 +1,16 @@
 use tauri::{AppHandle, Emitter};
 use tauri_plugin_shell::ShellExt;
 
+/// Sanitize metadata values for FFmpeg -metadata key=value format.
+/// Removes characters that could corrupt container metadata.
+fn sanitize_metadata(value: &str) -> String {
+    value
+        .replace('=', "_")
+        .replace('\n', " ")
+        .replace('\r', "")
+        .replace('\0', "")
+}
+
 #[derive(serde::Deserialize)]
 pub struct ExtractionRequest {
     pub input_path: String,
@@ -48,14 +58,14 @@ pub async fn extract_audio(
                 ];
                 // Add ID3 metadata
                 if let Some(ref title) = request.title {
-                    args.extend(["-metadata".to_string(), format!("title={}", title)]);
+                    args.extend(["-metadata".to_string(), format!("title={}", sanitize_metadata(title))]);
                 }
                 if let Some(num) = request.episode_number {
                     args.extend(["-metadata".to_string(), format!("track={}", num)]);
                 }
                 if let Some(ref show) = request.show_name {
-                    args.extend(["-metadata".to_string(), format!("album={}", show)]);
-                    args.extend(["-metadata".to_string(), format!("artist={}", show)]);
+                    args.extend(["-metadata".to_string(), format!("album={}", sanitize_metadata(show))]);
+                    args.extend(["-metadata".to_string(), format!("artist={}", sanitize_metadata(show))]);
                 }
                 args.push(output_path.clone());
                 (output_path, args)
@@ -76,14 +86,14 @@ pub async fn extract_audio(
                     "192k".to_string(),
                 ];
                 if let Some(ref title) = request.title {
-                    args.extend(["-metadata".to_string(), format!("title={}", title)]);
+                    args.extend(["-metadata".to_string(), format!("title={}", sanitize_metadata(title))]);
                 }
                 if let Some(num) = request.episode_number {
                     args.extend(["-metadata".to_string(), format!("track={}", num)]);
                 }
                 if let Some(ref show) = request.show_name {
-                    args.extend(["-metadata".to_string(), format!("album={}", show)]);
-                    args.extend(["-metadata".to_string(), format!("artist={}", show)]);
+                    args.extend(["-metadata".to_string(), format!("album={}", sanitize_metadata(show))]);
+                    args.extend(["-metadata".to_string(), format!("artist={}", sanitize_metadata(show))]);
                 }
                 args.push(output_path.clone());
                 (output_path, args)
@@ -115,7 +125,7 @@ pub async fn extract_audio(
         let output = app
             .shell()
             .sidecar("ffmpeg")
-            .expect("failed to create ffmpeg sidecar")
+            .map_err(|e| format!("FFmpeg binary not found. Please reinstall the app: {}", e))?
             .args(&args)
             .output()
             .await

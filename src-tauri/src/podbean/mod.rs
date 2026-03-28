@@ -74,8 +74,10 @@ impl PodbeanClient {
     pub fn new(client_id: &str, client_secret: &str) -> Self {
         let http = reqwest::Client::builder()
             .user_agent("MAMPodcastStudio/1.0")
+            .timeout(std::time::Duration::from_secs(600))
+            .connect_timeout(std::time::Duration::from_secs(30))
             .build()
-            .expect("Failed to build HTTP client");
+            .unwrap_or_else(|_| reqwest::Client::new());
 
         Self {
             client_id: client_id.to_string(),
@@ -116,7 +118,7 @@ impl PodbeanClient {
         let resp = self
             .http
             .get(format!("{}/podcasts", BASE_URL))
-            .query(&[("access_token", access_token)])
+            .header("Authorization", format!("Bearer {}", access_token))
             .send()
             .await
             .context("Failed to list podcasts")?;
@@ -145,8 +147,8 @@ impl PodbeanClient {
         let resp = self
             .http
             .get(format!("{}/files/uploadAuthorize", BASE_URL))
+            .header("Authorization", format!("Bearer {}", access_token))
             .query(&[
-                ("access_token", access_token),
                 ("filename", filename),
                 ("filesize", &filesize.to_string()),
                 ("content_type", content_type),
@@ -157,7 +159,7 @@ impl PodbeanClient {
 
         let status = resp.status();
         let body = resp.text().await.unwrap_or_default();
-        log::info!("[Podbean] Upload authorize response ({}): {}", status, body);
+        log::info!("[Podbean] Upload authorize response ({}): <body redacted>", status);
 
         if !status.is_success() {
             anyhow::bail!("Upload authorization failed ({}): {}", status, body);
@@ -204,7 +206,6 @@ impl PodbeanClient {
         publish_timestamp: Option<u64>,
     ) -> Result<EpisodeResponse> {
         let mut params = vec![
-            ("access_token", access_token.to_string()),
             ("title", title.to_string()),
             ("content", content.to_string()),
             ("media_key", media_key.to_string()),
@@ -223,6 +224,7 @@ impl PodbeanClient {
         let resp = self
             .http
             .post(format!("{}/episodes", BASE_URL))
+            .header("Authorization", format!("Bearer {}", access_token))
             .form(&params)
             .send()
             .await
@@ -230,7 +232,7 @@ impl PodbeanClient {
 
         let resp_status = resp.status();
         let body = resp.text().await.unwrap_or_default();
-        log::info!("[Podbean] Publish response ({}): {}", resp_status, body);
+        log::info!("[Podbean] Publish response ({}): <body redacted>", resp_status);
 
         if !resp_status.is_success() {
             anyhow::bail!("Episode publish failed ({}): {}", resp_status, body);

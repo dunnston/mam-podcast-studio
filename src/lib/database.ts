@@ -7,11 +7,21 @@
 import { isSecretKey, setSecret, getSecret, getAllSecrets } from "./secrets";
 
 let dbPromise: Promise<any> | null = null;
+let initStarted = false;
 
 async function getDb() {
   if (!dbPromise) {
+    if (initStarted) {
+      // Another call is already initializing — wait for it
+      while (!dbPromise) {
+        await new Promise((r) => setTimeout(r, 10));
+      }
+      return dbPromise;
+    }
+    initStarted = true;
     dbPromise = initDb().catch((err) => {
-      dbPromise = null; // Allow retry on failure
+      dbPromise = null;
+      initStarted = false;
       throw err;
     });
   }
@@ -248,6 +258,21 @@ export async function updateEpisode(
     sets.push(`episode_number = $${paramIndex++}`);
     values.push(data.episode_number);
   }
+  if (data.recording_date !== undefined) {
+    sets.push(`recording_date = $${paramIndex++}`);
+    values.push(data.recording_date);
+  }
+  if (data.guest_names !== undefined) {
+    sets.push(`guest_names = $${paramIndex++}`);
+    values.push(data.guest_names ? JSON.stringify(data.guest_names) : null);
+  }
+  if (data.tags !== undefined) {
+    sets.push(`tags = $${paramIndex++}`);
+    values.push(data.tags ? JSON.stringify(data.tags) : null);
+  }
+
+  // Guard: if no fields to update (only updated_at), skip the query
+  if (sets.length === 0) return;
 
   sets.push(`updated_at = datetime('now')`);
   values.push(id);

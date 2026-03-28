@@ -1,6 +1,4 @@
 use crate::youtube::{YouTubeClient, YouTubeProgress};
-use std::io::{Read, Write};
-use std::net::TcpListener;
 use tauri::{AppHandle, Emitter};
 
 // ─── OAuth flow ──────────────────────────────────────────────────
@@ -14,8 +12,9 @@ pub async fn youtube_oauth_start(
 ) -> Result<serde_json::Value, String> {
     let client = YouTubeClient::new(&client_id, &client_secret);
 
-    // Bind to a random available port on loopback
-    let listener = TcpListener::bind("127.0.0.1:0")
+    // Bind to a random available port on loopback using async TCP
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
         .map_err(|e| format!("Failed to bind loopback listener: {}", e))?;
     let port = listener
         .local_addr()
@@ -31,58 +30,40 @@ pub async fn youtube_oauth_start(
     open::that(&auth_url)
         .map_err(|e| format!("Failed to open browser: {}", e))?;
 
-    // Set a 2-minute timeout for the user to complete consent
-    let timeout = std::time::Duration::from_secs(120);
+    // Wait for callback with 2-minute timeout (async, no thread blocking)
+    let code = tokio::time::timeout(
+        std::time::Duration::from_secs(120),
+        async {
+            let (mut stream, _) = listener.accept().await
+                .map_err(|e| format!("Listener error: {}", e))?;
 
-    let code = tokio::task::spawn_blocking(move || -> Result<String, String> {
-        // Use a timeout via setting SO_RCVTIMEO isn't portable, so we use
-        // non-blocking with polling
-        listener.set_nonblocking(true).ok();
-        let start = std::time::Instant::now();
+            use tokio::io::{AsyncReadExt, AsyncWriteExt};
+            let mut buf = [0u8; 16384];
+            let n = stream.read(&mut buf).await.unwrap_or(0);
+            let request = String::from_utf8_lossy(&buf[..n]).to_string();
 
-        loop {
-            match listener.accept() {
-                Ok((mut stream, _)) => {
-                    // Read the HTTP request
-                    let mut buf = [0u8; 16384];
-                    let n = stream.read(&mut buf).unwrap_or(0);
-                    let request = String::from_utf8_lossy(&buf[..n]).to_string();
+            let code = extract_code_from_request(&request);
 
-                    // Extract the authorization code from the query string
-                    let code = extract_code_from_request(&request);
+            let (status, body) = if code.is_some() {
+                ("200 OK", "<html><body><h2>Authorization successful!</h2><p>You can close this tab and return to MAM Podcast Studio.</p></body></html>")
+            } else {
+                ("400 Bad Request", "<html><body><h2>Authorization failed</h2><p>No authorization code received. Please try again.</p></body></html>")
+            };
 
-                    // Send a response to the browser
-                    let (status, body) = if code.is_some() {
-                        ("200 OK", "<html><body><h2>Authorization successful!</h2><p>You can close this tab and return to MAM Podcast Studio.</p></body></html>")
-                    } else {
-                        ("400 Bad Request", "<html><body><h2>Authorization failed</h2><p>No authorization code received. Please try again.</p></body></html>")
-                    };
+            let response = format!(
+                "HTTP/1.1 {}\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n{}",
+                status, body
+            );
+            let _ = stream.write_all(response.as_bytes()).await;
+            let _ = stream.flush().await;
+            drop(stream);
 
-                    let response = format!(
-                        "HTTP/1.1 {}\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n{}",
-                        status, body
-                    );
-                    let _ = stream.write_all(response.as_bytes());
-                    let _ = stream.flush();
-                    drop(stream);
-
-                    return code.ok_or_else(|| "No authorization code in callback".to_string());
-                }
-                Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                    if start.elapsed() > timeout {
-                        return Err("OAuth timeout: user did not complete authorization within 2 minutes".to_string());
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(200));
-                }
-                Err(e) => {
-                    return Err(format!("Listener error: {}", e));
-                }
-            }
+            code.ok_or_else(|| "No authorization code in callback".to_string())
         }
-    })
+    )
     .await
-    .map_err(|e| format!("OAuth task error: {}", e))?
-    .map_err(|e| e)?;
+    .map_err(|_| "OAuth timeout: user did not complete authorization within 2 minutes".to_string())?
+    .map_err(|e: String| e)?;
 
     log::info!("[YouTube] Got authorization code, exchanging for tokens...");
 
@@ -209,21 +190,28 @@ fn extract_code_from_request(request: &str) -> Option<String> {
     None
 }
 
-/// Simple URL decode
+/// URL decode — handles multi-byte UTF-8 percent-encoded sequences correctly.
 fn url_decode(input: &str) -> String {
-    let mut result = String::new();
-    let mut chars = input.chars();
-    while let Some(c) = chars.next() {
-        if c == '%' {
-            let hex: String = chars.by_ref().take(2).collect();
-            if let Ok(byte) = u8::from_str_radix(&hex, 16) {
-                result.push(byte as char);
+    let mut bytes = Vec::new();
+    let input_bytes = input.as_bytes();
+    let mut i = 0;
+    while i < input_bytes.len() {
+        if input_bytes[i] == b'%' && i + 2 < input_bytes.len() {
+            if let Ok(byte) = u8::from_str_radix(
+                &input[i + 1..i + 3],
+                16,
+            ) {
+                bytes.push(byte);
+                i += 3;
+                continue;
             }
-        } else if c == '+' {
-            result.push(' ');
-        } else {
-            result.push(c);
+        } else if input_bytes[i] == b'+' {
+            bytes.push(b' ');
+            i += 1;
+            continue;
         }
+        bytes.push(input_bytes[i]);
+        i += 1;
     }
-    result
+    String::from_utf8_lossy(&bytes).to_string()
 }

@@ -20,7 +20,7 @@ pub async fn extract_frame(
     let output = app
         .shell()
         .sidecar("ffmpeg")
-        .expect("failed to create ffmpeg sidecar")
+        .map_err(|e| format!("FFmpeg binary not found. Please reinstall the app: {}", e))?
         .args([
             "-y",
             "-ss", &timestamp,
@@ -73,7 +73,11 @@ pub async fn remove_background(
         .text("size", "auto")
         .text("format", "png");
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .connect_timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| format!("Failed to build HTTP client: {}", e))?;
     let response = client
         .post("https://api.remove.bg/v1.0/removebg")
         .header("X-Api-Key", &api_key)

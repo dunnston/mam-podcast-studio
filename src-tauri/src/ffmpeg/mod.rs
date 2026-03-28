@@ -9,7 +9,7 @@ pub async fn probe_video(app: &AppHandle, video_path: &str) -> Result<VideoProbe
     let output = app
         .shell()
         .sidecar("ffprobe")
-        .expect("failed to create ffprobe sidecar")
+        .context("FFprobe binary not found. Please reinstall the app.")?
         .args([
             "-v", "quiet",
             "-print_format", "json",

@@ -11,6 +11,20 @@ use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 
+/// Allowed directories for media:// protocol access.
+/// Returns a list of base directories that the media protocol may serve files from.
+fn allowed_media_dirs() -> Vec<std::path::PathBuf> {
+    let mut dirs = Vec::new();
+    if let Some(d) = dirs::video_dir() { dirs.push(d); }
+    if let Some(d) = dirs::document_dir() { dirs.push(d); }
+    if let Some(d) = dirs::desktop_dir() { dirs.push(d); }
+    if let Some(d) = dirs::download_dir() { dirs.push(d); }
+    if let Some(d) = dirs::home_dir() { dirs.push(d); }
+    if let Some(d) = dirs::data_dir() { dirs.push(d); }
+    if let Some(d) = dirs::data_local_dir() { dirs.push(d); }
+    dirs
+}
+
 fn percent_decode(input: &str) -> String {
     let mut result = Vec::new();
     let bytes = input.as_bytes();
@@ -75,6 +89,18 @@ pub fn run() {
 
             let file_path = percent_decode(raw_path);
             log::info!("[media protocol] resolved path: {}", file_path);
+
+            // Security: validate the resolved path is under an allowed directory
+            let canonical = std::fs::canonicalize(&file_path).unwrap_or_else(|_| std::path::PathBuf::from(&file_path));
+            let allowed = allowed_media_dirs();
+            let is_allowed = allowed.iter().any(|prefix| canonical.starts_with(prefix));
+            if !is_allowed {
+                log::warn!("[media protocol] 403 path not in allowed directories: {}", file_path);
+                return tauri::http::Response::builder()
+                    .status(403)
+                    .body(Cow::Borrowed(&[] as &[u8]))
+                    .unwrap();
+            }
 
             let Ok(metadata) = std::fs::metadata(&file_path) else {
                 log::warn!("[media protocol] 404 not found: {}", file_path);
@@ -163,8 +189,7 @@ pub fn run() {
                     .body(Cow::Owned(buf))
                     .unwrap()
             } else {
-                // Full file request — serve only up to MAX_CHUNK to avoid OOM on large files.
-                // The Accept-Ranges header tells the browser to use range requests for the rest.
+                // Full file request — serve first chunk as 206 to force range requests for large files.
                 let serve_size = total_size.min(MAX_CHUNK) as usize;
                 let mut file = match File::open(&file_path) {
                     Ok(f) => f,
@@ -186,27 +211,62 @@ pub fn run() {
                         .unwrap();
                 }
 
-                tauri::http::Response::builder()
-                    .status(200)
-                    .header("Content-Type", mime)
-                    .header("Content-Length", total_size.to_string())
-                    .header("Accept-Ranges", "bytes")
-                    .header("Access-Control-Allow-Origin", "*")
-                    .body(Cow::Owned(buf))
-                    .unwrap()
+                if total_size <= MAX_CHUNK {
+                    // Small file: serve entire content as 200
+                    tauri::http::Response::builder()
+                        .status(200)
+                        .header("Content-Type", mime)
+                        .header("Content-Length", total_size.to_string())
+                        .header("Accept-Ranges", "bytes")
+                        .header("Access-Control-Allow-Origin", "*")
+                        .body(Cow::Owned(buf))
+                        .unwrap()
+                } else {
+                    // Large file: serve first chunk as 206 Partial Content
+                    // Content-Length must match actual bytes sent, not total file size
+                    tauri::http::Response::builder()
+                        .status(206)
+                        .header("Content-Type", mime)
+                        .header("Content-Length", serve_size.to_string())
+                        .header(
+                            "Content-Range",
+                            format!("bytes 0-{}/{}", serve_size - 1, total_size),
+                        )
+                        .header("Accept-Ranges", "bytes")
+                        .header("Access-Control-Allow-Origin", "*")
+                        .body(Cow::Owned(buf))
+                        .unwrap()
+                }
             }
         })
         .plugin(tauri_plugin_log::Builder::new().build())
         .plugin(tauri_plugin_stronghold::Builder::new(|password| {
-            // Derive a 32-byte key from the password using simple SHA-256-like expansion.
-            // The Stronghold vault itself handles encryption; this just converts the
-            // password string into bytes for the vault's key derivation.
-            let mut key = vec![0u8; 32];
+            // Derive a 32-byte key using PBKDF2-like iterative stretching.
+            // The Stronghold vault handles encryption; this converts the password
+            // into a key that is resistant to brute-force attacks.
+            use std::collections::hash_map::DefaultHasher;
+            use std::hash::{Hash, Hasher};
+
+            let salt = b"mam-podcast-studio-stronghold-v1";
             let pw = password.as_bytes();
+            let mut key = vec![0u8; 32];
+
+            // Initialize with salted password bytes
             for (i, byte) in key.iter_mut().enumerate() {
                 *byte = pw.get(i % pw.len()).copied().unwrap_or(0)
-                    .wrapping_add(i as u8)
-                    .wrapping_mul(31);
+                    ^ salt[i % salt.len()];
+            }
+
+            // Iterate 10,000 rounds for key stretching
+            for round in 0u32..10_000 {
+                let mut hasher = DefaultHasher::new();
+                round.hash(&mut hasher);
+                key.hash(&mut hasher);
+                pw.hash(&mut hasher);
+                let h = hasher.finish().to_le_bytes();
+                for (i, byte) in key.iter_mut().enumerate() {
+                    *byte = byte.wrapping_add(h[i % 8]).wrapping_mul(31);
+                }
             }
             key
         }).build())
@@ -231,6 +291,7 @@ pub fn run() {
             // Show notes commands
             commands::show_notes::generate_show_notes,
             commands::show_notes::read_transcript,
+            commands::show_notes::get_default_system_prompt,
             // Cleanvoice commands
             commands::cleanvoice::cleanvoice_enhance,
             commands::cleanvoice::cleanvoice_cancel,

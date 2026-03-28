@@ -3,6 +3,11 @@ use crate::claude::GenerationResult;
 use tauri::AppHandle;
 
 #[tauri::command]
+pub async fn get_default_system_prompt() -> String {
+    claude::get_default_system_prompt().to_string()
+}
+
+#[tauri::command]
 pub async fn generate_show_notes(
     _app: AppHandle,
     api_key: String,
@@ -53,18 +58,25 @@ fn read_docx_text(path: &str) -> Result<String, String> {
 
     let mut document_xml = String::new();
     {
-        let mut doc_entry = archive
+        let doc_entry = archive
             .by_name("word/document.xml")
             .map_err(|e| format!("Failed to find document.xml in DOCX: {}", e))?;
 
-        // Guard against excessively large DOCX files
-        if doc_entry.size() > 20 * 1024 * 1024 {
+        // Guard: check uncompressed size BEFORE reading to prevent zip bombs
+        const MAX_DOCX_SIZE: u64 = 20 * 1024 * 1024;
+        if doc_entry.size() > MAX_DOCX_SIZE {
             return Err("Transcript file is too large (max 20 MB). Please convert to .txt first.".to_string());
         }
 
-        doc_entry
+        // Use take() to limit decompression even if size header lies
+        let mut limited = doc_entry.take(MAX_DOCX_SIZE + 1);
+        limited
             .read_to_string(&mut document_xml)
             .map_err(|e| format!("Failed to read document.xml: {}", e))?;
+
+        if document_xml.len() as u64 > MAX_DOCX_SIZE {
+            return Err("Transcript file is too large (max 20 MB). Please convert to .txt first.".to_string());
+        }
     }
 
     // XML text extraction - strip tags, detect paragraph boundaries
