@@ -30,6 +30,21 @@ export interface Episode {
   updated_at?: string;
 }
 
+export interface TitleBarConfig {
+  text: string;
+  bgColor: string;
+  textColor: string;
+  borderColor: string;
+  borderWidth: number;
+  fontSize: number;
+}
+
+export interface PhotoPosition {
+  x: number;
+  y: number;
+  scale: number;
+}
+
 export interface ThumbnailConfig {
   templateId: string;
   headline: string;
@@ -39,6 +54,12 @@ export interface ThumbnailConfig {
   backgroundColor: string;
   textColor: string;
   photos: string[]; // base64 data URLs (background-removed cutouts)
+
+  // YouTube-style template fields
+  backgroundImage?: string;
+  title1?: TitleBarConfig;
+  title2?: TitleBarConfig;
+  photoPositions?: PhotoPosition[];
 }
 
 export interface VideoInfo {
