@@ -234,9 +234,12 @@ export function EnhanceStep() {
 
   // ─── Helpers ──────────────────────────────────────────────────
   const buildEpisodeName = () => {
-    const epNum = currentEpisode?.episode_number || "XX";
+    const { fileNamingTemplate } = useSettingsStore.getState();
+    const epNum = String(currentEpisode?.episode_number || "XX");
     const title = (currentEpisode?.title || "episode").replace(/[^a-zA-Z0-9]/g, "-").slice(0, 40);
-    return `MAM-EP${epNum}-${title}`;
+    return fileNamingTemplate
+      .replace("{episode_number}", epNum)
+      .replace("{title}", title);
   };
 
   const getSelectedCvConfig = () => {

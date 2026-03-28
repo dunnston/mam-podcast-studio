@@ -1,14 +1,26 @@
 /**
  * Database operations via Tauri SQL plugin.
  * All queries go through the frontend SQL plugin connection.
+ * API keys and secrets are stored in encrypted Stronghold vault (see secrets.ts).
  */
 
-let db: any = null;
+import { isSecretKey, setSecret, getSecret, getAllSecrets } from "./secrets";
+
+let dbPromise: Promise<any> | null = null;
 
 async function getDb() {
-  if (db) return db;
+  if (!dbPromise) {
+    dbPromise = initDb().catch((err) => {
+      dbPromise = null; // Allow retry on failure
+      throw err;
+    });
+  }
+  return dbPromise;
+}
+
+async function initDb() {
   const Database = await import("@tauri-apps/plugin-sql");
-  db = await Database.default.load("sqlite:mam_podcast_studio.db");
+  const db = await Database.default.load("sqlite:mam_podcast_studio.db");
 
   // Run migrations
   await db.execute(`
@@ -469,6 +481,25 @@ export async function updateThumbnailExportPath(
 // ─── Settings ───────────────────────────────────────────────────
 
 export async function getSetting(key: string): Promise<string | null> {
+  // Route secret keys through encrypted vault
+  if (isSecretKey(key)) {
+    const secret = await getSecret(key);
+    if (secret) return secret;
+    // Fall back to SQLite for migration (read old plaintext, then migrate)
+    const conn = await getDb();
+    const rows: { value: string }[] = await conn.select(
+      "SELECT value FROM settings WHERE key = $1",
+      [key]
+    );
+    const oldValue = rows[0]?.value || null;
+    if (oldValue) {
+      // Migrate: move from SQLite to vault, then remove from SQLite
+      await setSecret(key, oldValue);
+      await conn.execute("DELETE FROM settings WHERE key = $1", [key]);
+    }
+    return oldValue;
+  }
+
   const conn = await getDb();
   const rows: { value: string }[] = await conn.select(
     "SELECT value FROM settings WHERE key = $1",
@@ -478,6 +509,13 @@ export async function getSetting(key: string): Promise<string | null> {
 }
 
 export async function setSetting(key: string, value: string): Promise<void> {
+  // Route secret keys through encrypted vault
+  if (isSecretKey(key)) {
+    const stored = await setSecret(key, value);
+    if (stored) return;
+    // If vault failed, fall through to SQLite as fallback
+  }
+
   const conn = await getDb();
   await conn.execute(
     `INSERT INTO settings (key, value, updated_at) VALUES ($1, $2, datetime('now'))
@@ -495,5 +533,16 @@ export async function getAllSettings(): Promise<Record<string, string>> {
   for (const row of rows) {
     settings[row.key] = row.value;
   }
+
+  // Overlay secrets from encrypted vault (and auto-migrate any old plaintext keys)
+  const secrets = await getAllSecrets();
+  for (const [key, value] of Object.entries(secrets)) {
+    settings[key] = value;
+    // If this key still exists in SQLite, migrate it out
+    if (rows.some((r) => r.key === key)) {
+      await conn.execute("DELETE FROM settings WHERE key = $1", [key]);
+    }
+  }
+
   return settings;
 }
