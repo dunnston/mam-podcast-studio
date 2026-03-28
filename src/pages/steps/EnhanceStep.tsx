@@ -212,11 +212,16 @@ export function EnhanceStep() {
     };
   }, [setProgress]);
 
-  // Subscribe to Cleanvoice transcript event
+  // Subscribe to Cleanvoice transcript event (with session guard)
   useEffect(() => {
     let active = true;
+    const sessionAtSubscribe = useEpisodeStore.getState().wizardSessionId;
     onCleanvoiceTranscript((transcript) => {
       if (!active) return;
+      // Guard: only update if the wizard session hasn't changed
+      const currentSession = useEpisodeStore.getState().wizardSessionId;
+      if (currentSession !== sessionAtSubscribe) return;
+
       setCleanvoiceTranscript(transcript);
       // Persist to DB so it survives navigation/session changes
       const episodeId = useEpisodeStore.getState().currentEpisode?.id;

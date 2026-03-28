@@ -61,6 +61,7 @@ export function ThumbnailStep() {
   const previewRef = useRef<HTMLDivElement>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [exportedPath, setExportedPath] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [isLoadingBg, setIsLoadingBg] = useState(false);
 
   // Initialize config from episode data on mount
@@ -130,10 +131,12 @@ export function ThumbnailStep() {
   const handleExport = async () => {
     if (!previewRef.current) return;
     setIsExporting(true);
+    setExportError(null);
+
+    const node = previewRef.current;
+    const originalTransform = node.style.transform;
     try {
       // Temporarily remove scale transform for full-size export
-      const node = previewRef.current;
-      const originalTransform = node.style.transform;
       node.style.transform = "scale(1)";
 
       const dataUrl = await toPng(node, {
@@ -141,9 +144,6 @@ export function ThumbnailStep() {
         height: 720,
         pixelRatio: 1,
       });
-
-      // Restore scale transform
-      node.style.transform = originalTransform;
 
       const epNum = currentEpisode?.episode_number || 0;
       const defaultName = `MAM-EP${epNum}-thumbnail.png`;
@@ -153,7 +153,6 @@ export function ThumbnailStep() {
         filters: [{ name: "PNG Image", extensions: ["png"] }],
       });
       if (!path) {
-        setIsExporting(false);
         return;
       }
 
@@ -166,29 +165,42 @@ export function ThumbnailStep() {
       setExportedPath(path);
       setThumbnailExportedPath(path);
 
-      // Save to database
+      // Save to database (strip base64 blobs from config to keep DB rows small)
       if (currentEpisode?.id) {
+        const configForDb = {
+          ...config,
+          photos: [], // Don't store base64 in DB
+          backgroundImage: undefined,
+        };
         await saveThumbnail({
           episode_id: currentEpisode.id,
           template_id: config.templateId,
-          config_json: JSON.stringify(config),
+          config_json: JSON.stringify(configForDb),
           exported_path: path,
         });
       }
     } catch (e) {
       console.error("Export failed:", e);
+      setExportError(e instanceof Error ? e.message : "Export failed. Please try again.");
     } finally {
+      // Always restore transform, even on error
+      node.style.transform = originalTransform;
       setIsExporting(false);
     }
   };
 
   const handleContinue = async () => {
-    // Save thumbnail config to DB if not exported
+    // Save thumbnail config to DB if not exported (strip base64 blobs)
     if (currentEpisode?.id && config.photos.length > 0 && !exportedPath) {
+      const configForDb = {
+        ...config,
+        photos: [], // Don't store base64 in DB
+        backgroundImage: undefined,
+      };
       await saveThumbnail({
         episode_id: currentEpisode.id,
         template_id: config.templateId,
-        config_json: JSON.stringify(config),
+        config_json: JSON.stringify(configForDb),
       });
     }
     setCurrentStep("review");
@@ -548,6 +560,23 @@ export function ThumbnailStep() {
           onPhotoPositionChange={isYouTube ? handlePhotoPositionChange : undefined}
         />
       </div>
+
+      {/* Export error */}
+      {exportError && (
+        <div
+          style={{
+            padding: "12px 16px",
+            backgroundColor: "rgba(192, 57, 43, 0.12)",
+            border: "1px solid rgba(192, 57, 43, 0.25)",
+            borderRadius: "8px",
+            fontFamily: "var(--font-body)",
+            fontSize: "13px",
+            color: "#E57373",
+          }}
+        >
+          Export failed: {exportError}
+        </div>
+      )}
 
       {/* Export status */}
       {exportedPath && (

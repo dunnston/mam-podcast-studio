@@ -4,9 +4,19 @@ use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter};
 use tauri_plugin_shell::ShellExt;
 
-// Track cancellation flag
-static CANCELLED: std::sync::LazyLock<Arc<Mutex<bool>>> =
-    std::sync::LazyLock::new(|| Arc::new(Mutex::new(false)));
+/// Guard that deletes a temp file when dropped (even on error/cancel).
+struct TempFileGuard(PathBuf);
+impl Drop for TempFileGuard {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
+
+// Per-job cancellation: stores the current active job ID; cancel sets it to 0
+static ACTIVE_JOB_ID: std::sync::LazyLock<Arc<std::sync::atomic::AtomicU64>> =
+    std::sync::LazyLock::new(|| Arc::new(std::sync::atomic::AtomicU64::new(0)));
+static NEXT_JOB_ID: std::sync::LazyLock<Arc<std::sync::atomic::AtomicU64>> =
+    std::sync::LazyLock::new(|| Arc::new(std::sync::atomic::AtomicU64::new(1)));
 
 #[derive(serde::Deserialize, Debug)]
 pub struct CleanvoiceEnhanceRequest {
@@ -50,7 +60,7 @@ async fn extract_audio_from_video(
     let output = app
         .shell()
         .sidecar("ffmpeg")
-        .expect("failed to create ffmpeg sidecar")
+        .map_err(|e| format!("FFmpeg binary not found. Please reinstall the app: {}", e))?
         .args(&args)
         .output()
         .await
@@ -85,7 +95,7 @@ async fn mux_audio_into_video(
     let output = app
         .shell()
         .sidecar("ffmpeg")
-        .expect("failed to create ffmpeg sidecar")
+        .map_err(|e| format!("FFmpeg binary not found. Please reinstall the app: {}", e))?
         .args(&args)
         .output()
         .await
@@ -164,11 +174,10 @@ pub async fn cleanvoice_enhance(
     app: AppHandle,
     request: CleanvoiceEnhanceRequest,
 ) -> Result<CleanvoiceEnhanceResult, String> {
-    // Reset cancellation flag
-    {
-        let mut cancelled = CANCELLED.lock().unwrap_or_else(|e| e.into_inner());
-        *cancelled = false;
-    }
+    // Assign a unique job ID for this enhancement run
+    let job_id = NEXT_JOB_ID.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    ACTIVE_JOB_ID.store(job_id, std::sync::atomic::Ordering::SeqCst);
+    let is_cancelled = || ACTIVE_JOB_ID.load(std::sync::atomic::Ordering::SeqCst) != job_id;
 
     log::info!("[Cleanvoice] Starting enhancement for: {}", request.input_path);
 
@@ -209,6 +218,10 @@ pub async fn cleanvoice_enhance(
     // - Enhancement only (noise, studio_sound, normalize) → extract audio, process, mux back
     let has_editing = config.has_editing_features();
 
+    // Temp file guards — these auto-delete on drop (even on error/cancel)
+    let mut _temp_audio_guard: Option<TempFileGuard> = None;
+    let mut _temp_enhanced_guard: Option<TempFileGuard> = None;
+
     let (file_to_upload, needs_mux) = if is_video && !has_editing {
         // Enhancement-only: extract audio first (10-50x smaller upload)
         let _ = app.emit("cleanvoice-progress", &CleanvoiceProgress {
@@ -230,6 +243,7 @@ pub async fn cleanvoice_enhance(
         )
         .await?;
 
+        _temp_audio_guard = Some(TempFileGuard(temp_audio.clone()));
         log::info!("[Cleanvoice] Audio extracted to: {}", temp_audio.display());
         (temp_audio, true) // Will need to mux back after
     } else if is_video && has_editing {
@@ -244,41 +258,38 @@ pub async fn cleanvoice_enhance(
     };
 
     // Check cancellation
-    {
-        let cancelled = CANCELLED.lock().unwrap_or_else(|e| e.into_inner());
-        if *cancelled {
-            return Err("Processing cancelled".to_string());
-        }
+    if is_cancelled() {
+        return Err("Processing cancelled".to_string());
     }
 
     // Determine the output path for Cleanvoice result
     let cleanvoice_output = if needs_mux {
         // Download enhanced audio to temp file, then mux
-        output_path
+        let temp_enhanced = output_path
             .parent()
             .unwrap_or(std::path::Path::new("."))
-            .join("_cleanvoice_temp_enhanced.m4a")
+            .join("_cleanvoice_temp_enhanced.m4a");
+        _temp_enhanced_guard = Some(TempFileGuard(temp_enhanced.clone()));
+        temp_enhanced
     } else {
         output_path.clone()
     };
 
     // Run the Cleanvoice pipeline
     let app_clone = app.clone();
+    let active_job_ref = ACTIVE_JOB_ID.clone();
+    let my_job_id = job_id;
     let result = client
         .enhance(&file_to_upload, &cleanvoice_output, config, move |progress: CleanvoiceProgress| {
             // Check cancellation
-            {
-                let cancelled = CANCELLED.lock().unwrap_or_else(|e| e.into_inner());
-                if *cancelled {
-                    return;
-                }
+            if active_job_ref.load(std::sync::atomic::Ordering::SeqCst) != my_job_id {
+                return;
             }
             let _ = app_clone.emit("cleanvoice-progress", &progress);
         })
         .await
         .map_err(|e| {
-            let cancelled = CANCELLED.lock().unwrap_or_else(|e| e.into_inner());
-            if *cancelled {
+            if is_cancelled() {
                 return "Processing cancelled".to_string();
             }
             e.to_string()
@@ -300,28 +311,13 @@ pub async fn cleanvoice_enhance(
         )
         .await?;
 
-        // Clean up temp files
-        let temp_audio = output_path
-            .parent()
-            .unwrap_or(std::path::Path::new("."))
-            .join("_cleanvoice_temp_audio.m4a");
-        let _ = tokio::fs::remove_file(&temp_audio).await;
-        let _ = tokio::fs::remove_file(&cleanvoice_output).await;
+        // Temp files are cleaned up automatically by TempFileGuard on drop
 
         let _ = app.emit("cleanvoice-progress", &CleanvoiceProgress {
             stage: "done".to_string(),
             message: "Enhancement complete".to_string(),
             percent: 100.0,
         });
-    }
-
-    // Clean up temp audio extraction if it exists
-    if is_video && !has_editing {
-        let temp_audio = output_path
-            .parent()
-            .unwrap_or(std::path::Path::new("."))
-            .join("_cleanvoice_temp_audio.m4a");
-        let _ = tokio::fs::remove_file(&temp_audio).await;
     }
 
     // Extract transcript and stats from result
@@ -352,8 +348,8 @@ pub async fn cleanvoice_enhance(
 
 #[tauri::command]
 pub async fn cleanvoice_cancel() -> Result<(), String> {
-    let mut cancelled = CANCELLED.lock().unwrap_or_else(|e| e.into_inner());
-    *cancelled = true;
+    // Setting to 0 invalidates any active job's ID check
+    ACTIVE_JOB_ID.store(0, std::sync::atomic::Ordering::SeqCst);
     Ok(())
 }
 

@@ -106,6 +106,10 @@ export async function readTranscript(filePath: string): Promise<string> {
   return invoke("read_transcript", { filePath });
 }
 
+export async function getDefaultSystemPrompt(): Promise<string> {
+  return invoke("get_default_system_prompt");
+}
+
 // ─── Cleanvoice AI ──────────────────────────────────────────────
 
 export interface CleanvoiceProgress {

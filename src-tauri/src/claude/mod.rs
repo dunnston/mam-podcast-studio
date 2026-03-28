@@ -114,16 +114,33 @@ pub fn get_default_system_prompt() -> &'static str {
 }
 
 /// Generate show notes from a transcript using the Claude API (non-streaming)
+/// Default Claude model — can be overridden via settings
+pub const DEFAULT_MODEL: &str = "claude-sonnet-4-20250514";
+
 pub async fn generate_show_notes(
     api_key: &str,
     transcript: &str,
     system_prompt: Option<&str>,
 ) -> Result<GenerationResult> {
-    let client = reqwest::Client::new();
+    // Guard: reject excessively large transcripts before sending to API
+    const MAX_TRANSCRIPT_CHARS: usize = 500_000; // ~125K tokens
+    if transcript.len() > MAX_TRANSCRIPT_CHARS {
+        anyhow::bail!(
+            "Transcript is too long ({} chars). Please trim it to under {} characters.",
+            transcript.len(),
+            MAX_TRANSCRIPT_CHARS
+        );
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(300))
+        .connect_timeout(std::time::Duration::from_secs(30))
+        .build()
+        .context("Failed to build HTTP client")?;
     let system = system_prompt.unwrap_or(DEFAULT_SYSTEM_PROMPT);
 
     let request = ClaudeRequest {
-        model: "claude-sonnet-4-20250514".to_string(),
+        model: DEFAULT_MODEL.to_string(),
         max_tokens: 4096,
         system: system.to_string(),
         messages: vec![ClaudeMessage {
@@ -184,10 +201,14 @@ pub async fn generate_show_notes(
 
 /// Test Claude API connectivity with a minimal request
 pub async fn test_connection(api_key: &str) -> Result<bool> {
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .connect_timeout(std::time::Duration::from_secs(15))
+        .build()
+        .context("Failed to build HTTP client")?;
 
     let request = ClaudeRequest {
-        model: "claude-sonnet-4-20250514".to_string(),
+        model: DEFAULT_MODEL.to_string(),
         max_tokens: 10,
         system: "Respond with OK".to_string(),
         messages: vec![ClaudeMessage {

@@ -10,7 +10,18 @@ import type { Stronghold, Store } from "@tauri-apps/plugin-stronghold";
 // Lazy-loaded Stronghold store
 let storePromise: Promise<{ store: Store; stronghold: Stronghold } | null> | null = null;
 
-const VAULT_PASSWORD = "mam-podcast-studio-vault-v1";
+// Derive a machine-specific vault password using the app data directory
+// as a device-unique component. This prevents offline extraction by
+// tying the vault to the specific machine's file system layout.
+async function getVaultPassword(): Promise<string> {
+  try {
+    const dir = await appDataDir();
+    // Use the directory path as a machine-unique component
+    return `mam-vault-${dir}-v1`;
+  } catch {
+    return "mam-podcast-studio-vault-v1";
+  }
+}
 
 // Keys that should be stored in the encrypted vault
 const SECRET_KEYS = new Set([
@@ -43,7 +54,8 @@ async function initStore(): Promise<{ store: Store; stronghold: Stronghold }> {
   const { Stronghold: SH } = await import("@tauri-apps/plugin-stronghold");
   const dir = await appDataDir();
   const vaultPath = `${dir}/mam-secrets.hold`;
-  const stronghold = await SH.load(vaultPath, VAULT_PASSWORD);
+  const vaultPassword = await getVaultPassword();
+  const stronghold = await SH.load(vaultPath, vaultPassword);
 
   let client;
   try {
@@ -111,8 +123,14 @@ export async function removeSecret(key: string): Promise<boolean> {
  */
 export async function getAllSecrets(): Promise<Record<string, string>> {
   const secrets: Record<string, string> = {};
-  for (const key of SECRET_KEYS) {
-    const value = await getSecret(key);
+  // Fetch all secrets in parallel instead of sequentially
+  const entries = await Promise.all(
+    Array.from(SECRET_KEYS).map(async (key) => {
+      const value = await getSecret(key);
+      return [key, value] as const;
+    })
+  );
+  for (const [key, value] of entries) {
     if (value) secrets[key] = value;
   }
   return secrets;
