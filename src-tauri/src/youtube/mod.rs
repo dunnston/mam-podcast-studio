@@ -259,7 +259,7 @@ impl YouTubeClient {
 
         let status = resp.status();
         let body = resp.text().await.unwrap_or_default();
-        eprintln!("[YouTube] Upload response ({}): {}", status, &body[..body.len().min(500)]);
+        log::info!("[YouTube] Upload response ({}): {}", status, &body[..body.len().min(500)]);
 
         if !status.is_success() {
             anyhow::bail!("Video upload failed ({}): {}", status, body);
@@ -367,7 +367,7 @@ impl YouTubeClient {
             .initiate_upload(access_token, &metadata, file_meta.len(), content_type)
             .await?;
 
-        eprintln!("[YouTube] Got upload URI, uploading {} bytes...", file_meta.len());
+        log::info!("[YouTube] Got upload URI, uploading {} bytes...", file_meta.len());
 
         // ── Step 2: Upload video bytes ───────────────────────────
         on_progress(YouTubeProgress {
@@ -381,7 +381,7 @@ impl YouTubeClient {
             .await?;
 
         let video_id = video_resp.id.clone().unwrap_or_default();
-        eprintln!("[YouTube] Video uploaded, ID: {}", video_id);
+        log::info!("[YouTube] Video uploaded, ID: {}", video_id);
 
         on_progress(YouTubeProgress {
             stage: "upload".to_string(),

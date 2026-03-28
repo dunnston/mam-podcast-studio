@@ -123,8 +123,7 @@ export function PublishStep() {
   const anyEnabled = podbean.enabled || youtube.enabled;
 
   const handlePublish = async () => {
-    // Publish to Podbean
-    if (podbean.enabled) {
+    const publishToPodbean = async () => {
       setPodbean((prev) => ({ ...prev, status: "publishing", progress: 0, message: "Starting...", error: "" }));
       try {
         const result = await podbeanPublish({
@@ -150,10 +149,9 @@ export function PublishStep() {
           message: "Failed",
         }));
       }
-    }
+    };
 
-    // Publish to YouTube
-    if (youtube.enabled) {
+    const publishToYoutube = async () => {
       setYoutube((prev) => ({ ...prev, status: "publishing", progress: 0, message: "Starting...", error: "" }));
       try {
         const result = await youtubeUpload({
@@ -185,7 +183,13 @@ export function PublishStep() {
           message: "Failed",
         }));
       }
-    }
+    };
+
+    // Run both publishes concurrently
+    const promises: Promise<void>[] = [];
+    if (podbean.enabled) promises.push(publishToPodbean());
+    if (youtube.enabled) promises.push(publishToYoutube());
+    await Promise.allSettled(promises);
   };
 
   const handleStartNew = () => {

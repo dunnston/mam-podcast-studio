@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/nicerdicer/tauri-v2-schema/main/tauri.conf.json",
+  "$schema": "https://schema.tauri.app/config/2",
   "productName": "MAM Podcast Studio",
   "version": "1.0.0",
   "identifier": "com.modernancestralmamas.podcast-studio",

@@ -24,7 +24,7 @@ pub async fn podbean_publish(
     app: AppHandle,
     request: PodbeanPublishRequest,
 ) -> Result<PodbeanPublishResult, String> {
-    eprintln!("[Podbean] Starting publish for: {}", request.title);
+    log::info!("[Podbean] Starting publish for: {}", request.title);
 
     let client = PodbeanClient::new(&request.client_id, &request.client_secret);
     let audio_path = std::path::PathBuf::from(&request.audio_path);

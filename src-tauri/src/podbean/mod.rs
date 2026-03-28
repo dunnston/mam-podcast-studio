@@ -157,7 +157,7 @@ impl PodbeanClient {
 
         let status = resp.status();
         let body = resp.text().await.unwrap_or_default();
-        eprintln!("[Podbean] Upload authorize response ({}): {}", status, body);
+        log::info!("[Podbean] Upload authorize response ({}): {}", status, body);
 
         if !status.is_success() {
             anyhow::bail!("Upload authorization failed ({}): {}", status, body);
@@ -230,7 +230,7 @@ impl PodbeanClient {
 
         let resp_status = resp.status();
         let body = resp.text().await.unwrap_or_default();
-        eprintln!("[Podbean] Publish response ({}): {}", resp_status, body);
+        log::info!("[Podbean] Publish response ({}): {}", resp_status, body);
 
         if !resp_status.is_success() {
             anyhow::bail!("Episode publish failed ({}): {}", resp_status, body);
@@ -260,7 +260,7 @@ impl PodbeanClient {
         });
 
         let token = self.authenticate().await?;
-        eprintln!("[Podbean] Authenticated, scope: {:?}", token.scope);
+        log::info!("[Podbean] Authenticated, scope: {:?}", token.scope);
 
         // ── Step 1: Authorize upload ─────────────────────────────
         on_progress(PodbeanProgress {

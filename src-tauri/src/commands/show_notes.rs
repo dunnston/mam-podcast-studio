@@ -56,36 +56,47 @@ fn read_docx_text(path: &str) -> Result<String, String> {
         let mut doc_entry = archive
             .by_name("word/document.xml")
             .map_err(|e| format!("Failed to find document.xml in DOCX: {}", e))?;
+
+        // Guard against excessively large DOCX files
+        if doc_entry.size() > 20 * 1024 * 1024 {
+            return Err("Transcript file is too large (max 20 MB). Please convert to .txt first.".to_string());
+        }
+
         doc_entry
             .read_to_string(&mut document_xml)
             .map_err(|e| format!("Failed to read document.xml: {}", e))?;
     }
 
-    // Simple XML text extraction - strip all tags
+    // XML text extraction - strip tags, detect paragraph boundaries
     let mut text = String::new();
     let mut in_tag = false;
-    let mut last_was_paragraph = false;
+    let mut current_tag = String::new();
 
     for ch in document_xml.chars() {
         match ch {
             '<' => {
                 in_tag = true;
-                // Check if we just left a paragraph
-                if document_xml.contains("<w:p ") || document_xml.contains("<w:p>") {
-                    if !last_was_paragraph {
-                        text.push('\n');
-                        last_was_paragraph = true;
-                    }
-                }
+                current_tag.clear();
             }
             '>' => {
                 in_tag = false;
+                // Insert newline at paragraph boundaries (<w:p>, <w:p ...>, </w:p>)
+                let tag_trimmed = current_tag.trim();
+                if tag_trimmed == "w:p"
+                    || tag_trimmed.starts_with("w:p ")
+                    || tag_trimmed == "/w:p"
+                {
+                    if !text.ends_with('\n') {
+                        text.push('\n');
+                    }
+                }
             }
-            _ if !in_tag => {
+            _ if in_tag => {
+                current_tag.push(ch);
+            }
+            _ => {
                 text.push(ch);
-                last_was_paragraph = false;
             }
-            _ => {}
         }
     }
 

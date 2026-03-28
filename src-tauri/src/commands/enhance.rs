@@ -58,7 +58,7 @@ pub async fn enhance_audio(
 
     // Store PID for cancellation
     {
-        let mut proc = CURRENT_PROCESS.lock().unwrap();
+        let mut proc = CURRENT_PROCESS.lock().unwrap_or_else(|e| e.into_inner());
         *proc = Some(child.pid());
     }
 
@@ -79,7 +79,7 @@ pub async fn enhance_audio(
             }
             CommandEvent::Stderr(line) => {
                 let line_str = String::from_utf8_lossy(&line).to_string();
-                eprintln!("[FFmpeg] {}", line_str);
+                log::info!("[FFmpeg] {}", line_str);
                 // Keep last 10 stderr lines for error reporting
                 last_stderr_lines.push(line_str.clone());
                 if last_stderr_lines.len() > 10 {
@@ -93,7 +93,7 @@ pub async fn enhance_audio(
             CommandEvent::Terminated(status) => {
                 // Check if this was a cancellation (PID already cleared by cancel_processing)
                 let was_cancelled = {
-                    let mut proc = CURRENT_PROCESS.lock().unwrap();
+                    let mut proc = CURRENT_PROCESS.lock().unwrap_or_else(|e| e.into_inner());
                     let cancelled = proc.is_none();
                     *proc = None;
                     cancelled
@@ -117,13 +117,18 @@ pub async fn enhance_audio(
         }
     }
 
+    // Clean up process slot if loop exits without Terminated event
+    {
+        let mut proc = CURRENT_PROCESS.lock().unwrap_or_else(|e| e.into_inner());
+        *proc = None;
+    }
     Err("FFmpeg process ended unexpectedly".to_string())
 }
 
 #[tauri::command]
 pub async fn cancel_processing() -> Result<(), String> {
     let pid = {
-        let mut proc = CURRENT_PROCESS.lock().unwrap();
+        let mut proc = CURRENT_PROCESS.lock().unwrap_or_else(|e| e.into_inner());
         proc.take()
     };
 

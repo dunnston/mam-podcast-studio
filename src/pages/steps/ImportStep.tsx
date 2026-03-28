@@ -111,9 +111,16 @@ export function ImportStep() {
   const handleContinue = async () => {
     if (!videoInfo || !filePath) return;
 
+    // Validate episode number
+    const epNum = episodeNumber ? parseInt(episodeNumber, 10) : undefined;
+    if (episodeNumber && (isNaN(epNum!) || epNum! < 1)) {
+      setError("Episode number must be a positive integer.");
+      return;
+    }
+
     const episodeData = {
       title: title || "Untitled Episode",
-      episode_number: episodeNumber ? parseInt(episodeNumber, 10) : undefined,
+      episode_number: epNum,
       recording_date: recordingDate || undefined,
       guest_names: guestNames
         ? guestNames.split(",").map((s) => s.trim()).filter(Boolean)
@@ -131,10 +138,8 @@ export function ImportStep() {
       setCurrentEpisode({ ...episodeData, id: episodeId });
       setCurrentStep("enhance");
     } catch (err) {
-      // If save fails, still allow continuing with in-memory state
       console.error("Failed to save episode to database:", err);
-      setCurrentEpisode(episodeData);
-      setCurrentStep("enhance");
+      setError("Failed to save episode. Please check available disk space and try again.");
     }
   };
 

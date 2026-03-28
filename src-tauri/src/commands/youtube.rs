@@ -22,25 +22,17 @@ pub async fn youtube_oauth_start(
         .map_err(|e| format!("Failed to get listener address: {}", e))?
         .port();
 
-    eprintln!("[YouTube] OAuth listener on port {}", port);
+    log::info!("[YouTube] OAuth listener on port {}", port);
 
     // Build auth URL and open in browser
     let auth_url = client.build_auth_url(port);
-    eprintln!("[YouTube] Opening auth URL: {}", auth_url);
+    log::info!("[YouTube] Opening auth URL: {}", auth_url);
 
     open::that(&auth_url)
         .map_err(|e| format!("Failed to open browser: {}", e))?;
 
-    // Wait for the callback (blocking, with timeout)
-    listener
-        .set_nonblocking(false)
-        .map_err(|e| format!("Failed to set blocking mode: {}", e))?;
-
     // Set a 2-minute timeout for the user to complete consent
     let timeout = std::time::Duration::from_secs(120);
-    listener
-        .set_nonblocking(false)
-        .ok();
 
     let code = tokio::task::spawn_blocking(move || -> Result<String, String> {
         // Use a timeout via setting SO_RCVTIMEO isn't portable, so we use
@@ -52,7 +44,7 @@ pub async fn youtube_oauth_start(
             match listener.accept() {
                 Ok((mut stream, _)) => {
                     // Read the HTTP request
-                    let mut buf = [0u8; 4096];
+                    let mut buf = [0u8; 16384];
                     let n = stream.read(&mut buf).unwrap_or(0);
                     let request = String::from_utf8_lossy(&buf[..n]).to_string();
 
@@ -92,7 +84,7 @@ pub async fn youtube_oauth_start(
     .map_err(|e| format!("OAuth task error: {}", e))?
     .map_err(|e| e)?;
 
-    eprintln!("[YouTube] Got authorization code, exchanging for tokens...");
+    log::info!("[YouTube] Got authorization code, exchanging for tokens...");
 
     // Exchange code for tokens
     let token = client
@@ -100,7 +92,7 @@ pub async fn youtube_oauth_start(
         .await
         .map_err(|e| e.to_string())?;
 
-    eprintln!("[YouTube] Got tokens, refresh_token present: {}", token.refresh_token.is_some());
+    log::info!("[YouTube] Got tokens, refresh_token present: {}", token.refresh_token.is_some());
 
     serde_json::to_value(&token).map_err(|e| e.to_string())
 }
@@ -149,7 +141,7 @@ pub async fn youtube_upload(
     app: AppHandle,
     request: YouTubeUploadRequest,
 ) -> Result<YouTubeUploadResult, String> {
-    eprintln!("[YouTube] Starting upload for: {}", request.title);
+    log::info!("[YouTube] Starting upload for: {}", request.title);
 
     let client = YouTubeClient::new(&request.client_id, &request.client_secret);
 

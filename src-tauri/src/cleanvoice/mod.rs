@@ -228,7 +228,7 @@ impl CleanvoiceClient {
         ];
 
         for (variant, url) in &endpoints {
-            eprintln!("[Cleanvoice] Trying upload URL: {} ({})", url, variant);
+            log::info!("[Cleanvoice] Trying upload URL: {} ({})", url, variant);
 
             let resp = if *variant == "query" {
                 self.http
@@ -254,14 +254,14 @@ impl CleanvoiceClient {
             let resp = match resp {
                 Ok(r) => r,
                 Err(e) => {
-                    eprintln!("[Cleanvoice] {} variant failed to connect: {}", variant, e);
+                    log::info!("[Cleanvoice] {} variant failed to connect: {}", variant, e);
                     continue;
                 }
             };
 
             let status = resp.status();
             let resp_text = resp.text().await.unwrap_or_default();
-            eprintln!("[Cleanvoice] {} response ({}): {}", variant, status, resp_text);
+            log::info!("[Cleanvoice] {} response ({}): {}", variant, status, resp_text);
 
             if status.is_success() {
                 let parsed: UploadResponse = serde_json::from_str(&resp_text)
@@ -320,7 +320,7 @@ impl CleanvoiceClient {
 
         let status = resp.status();
         let resp_text = resp.text().await.unwrap_or_default();
-        eprintln!("[Cleanvoice] Edit response ({}): {}", status, resp_text);
+        log::info!("[Cleanvoice] Edit response ({}): {}", status, resp_text);
 
         if !status.is_success() {
             // Try to extract a human-readable error message
@@ -367,7 +367,7 @@ impl CleanvoiceClient {
 
         // Log raw response when status is SUCCESS (to debug download URL)
         if resp_text.contains("SUCCESS") {
-            eprintln!("[Cleanvoice] Raw SUCCESS response: {}", resp_text);
+            log::info!("[Cleanvoice] Raw SUCCESS response: {}", resp_text);
         }
 
         serde_json::from_str(&resp_text)
@@ -489,10 +489,10 @@ impl CleanvoiceClient {
         };
 
         // Log the request for debugging
-        eprintln!("[Cleanvoice] Submitting edit: {}", serde_json::to_string_pretty(&request).unwrap_or_default());
+        log::info!("[Cleanvoice] Submitting edit: {}", serde_json::to_string_pretty(&request).unwrap_or_default());
 
         let edit_id = self.submit_edit(&request).await?;
-        eprintln!("[Cleanvoice] Edit ID: {}", edit_id);
+        log::info!("[Cleanvoice] Edit ID: {}", edit_id);
 
         // ── Step 3: Poll for completion ────────────────────────
         // Wait 30s before first poll (per docs)
@@ -507,11 +507,11 @@ impl CleanvoiceClient {
         let mut poll_count = 0u32;
         let final_status = loop {
             let status = self.get_edit_status(&edit_id).await?;
-            eprintln!("[Cleanvoice] Poll #{}: status={}", poll_count + 1, status.status);
+            log::info!("[Cleanvoice] Poll #{}: status={}", poll_count + 1, status.status);
 
             match status.status.as_str() {
                 "SUCCESS" => {
-                    eprintln!("[Cleanvoice] SUCCESS result: {:?}", status.result);
+                    log::info!("[Cleanvoice] SUCCESS result: {:?}", status.result);
                     on_progress(CleanvoiceProgress {
                         stage: "processing".to_string(),
                         message: "Processing complete!".to_string(),
@@ -559,7 +559,7 @@ impl CleanvoiceClient {
         // ── Step 4: Download result ────────────────────────────
         if let Some(ref result) = final_status.result {
             if let Some(ref url) = result.url {
-                eprintln!("[Cleanvoice] Downloading from: {}", url);
+                log::info!("[Cleanvoice] Downloading from: {}", url);
                 on_progress(CleanvoiceProgress {
                     stage: "download".to_string(),
                     message: "Downloading processed file...".to_string(),
@@ -568,18 +568,18 @@ impl CleanvoiceClient {
 
                 self.download_result(url, output_path).await?;
 
-                eprintln!("[Cleanvoice] Downloaded to: {}", output_path.display());
+                log::info!("[Cleanvoice] Downloaded to: {}", output_path.display());
                 on_progress(CleanvoiceProgress {
                     stage: "download".to_string(),
                     message: "Download complete".to_string(),
                     percent: 95.0,
                 });
             } else {
-                eprintln!("[Cleanvoice] WARNING: No download URL in result: {:?}", result);
+                log::info!("[Cleanvoice] WARNING: No download URL in result: {:?}", result);
                 anyhow::bail!("Cleanvoice completed but no download URL was provided");
             }
         } else {
-            eprintln!("[Cleanvoice] WARNING: No result object in SUCCESS response");
+            log::info!("[Cleanvoice] WARNING: No result object in SUCCESS response");
             anyhow::bail!("Cleanvoice completed but no result was provided");
         }
 
@@ -592,7 +592,7 @@ impl CleanvoiceClient {
 
         // Best-effort cleanup — don't fail the job if this errors
         if let Err(e) = self.delete_edit(&edit_id).await {
-            eprintln!("[Cleanvoice] Warning: failed to delete edit {}: {}", edit_id, e);
+            log::info!("[Cleanvoice] Warning: failed to delete edit {}: {}", edit_id, e);
         }
 
         on_progress(CleanvoiceProgress {

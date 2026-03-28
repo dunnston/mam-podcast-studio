@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   UploadCloud,
   FileText,
@@ -20,6 +20,7 @@ import {
 import { saveShowNotes } from "../../lib/database";
 import type { GenerationResult } from "../../lib/tauri";
 import { useSettingsStore } from "../../stores/settingsStore";
+import { getSetting } from "../../lib/database";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 
@@ -91,9 +92,9 @@ YouTube | https://www.youtube.com/@ModernAncestralMamas
 function estimateCost(charCount: number): { tokens: number; cost: string } {
   // Rough estimate: ~4 chars per token for Claude
   const tokens = Math.ceil(charCount / 4);
-  // Claude 3 Haiku: ~$0.25/1M input tokens + ~$1.25/1M output tokens
-  const inputCost = (tokens / 1_000_000) * 0.25;
-  const outputCost = (1200 / 1_000_000) * 1.25; // estimate 1200 output tokens
+  // Claude Sonnet: ~$3/1M input tokens + ~$15/1M output tokens
+  const inputCost = (tokens / 1_000_000) * 3;
+  const outputCost = (1200 / 1_000_000) * 15; // estimate 1200 output tokens
   const total = inputCost + outputCost;
   return { tokens, cost: `~$${total.toFixed(4)}` };
 }
@@ -111,25 +112,35 @@ export function ShowNotesStep() {
   } = useEpisodeStore();
 
   const { claudeApiKey } = useSettingsStore();
+  const [systemPrompt, setSystemPrompt] = useState<string>(DEFAULT_SYSTEM_PROMPT);
+
+  // Load saved template from database (user can override in Settings > Templates)
+  useEffect(() => {
+    getSetting("showNotesTemplate").then((saved) => {
+      if (saved) setSystemPrompt(saved);
+    });
+  }, []);
+
   const [transcriptSource, setTranscriptSource] = useState<"none" | "cleanvoice" | "file">("none");
   const [transcriptPath, setTranscriptPath] = useState<string | null>(null);
   const [transcriptText, setTranscriptText] = useState<string>("");
   const [isLoadingTranscript, setIsLoadingTranscript] = useState(false);
 
-  // Auto-populate with Cleanvoice transcript if available on mount
   const hasCleanvoiceTranscript = Boolean(cleanvoiceTranscript);
   const initializedRef = useRef(false);
-  if (!initializedRef.current && cleanvoiceTranscript) {
-    initializedRef.current = true;
-    setTranscriptText(cleanvoiceTranscript);
-    setTranscriptSource("cleanvoice");
-  }
+
+  // Auto-populate with Cleanvoice transcript if available on mount
+  useEffect(() => {
+    if (!initializedRef.current && cleanvoiceTranscript) {
+      initializedRef.current = true;
+      setTranscriptText(cleanvoiceTranscript);
+      setTranscriptSource("cleanvoice");
+    }
+  }, [cleanvoiceTranscript]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationResult, setGenerationResult] = useState<GenerationResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
   const [copied, setCopied] = useState(false);
-  const dropRef = useRef<HTMLDivElement>(null);
 
   const estimate = transcriptText ? estimateCost(transcriptText.length) : null;
 
@@ -158,7 +169,7 @@ export function ShowNotesStep() {
 
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
-    setIsDragging(false);
+    // Tauri can't read drag-and-drop paths directly; open a file dialog instead
     await handleBrowseTranscript();
   };
 
@@ -175,7 +186,7 @@ export function ShowNotesStep() {
       const result = await generateShowNotes(
         claudeApiKey,
         transcriptText,
-        DEFAULT_SYSTEM_PROMPT
+        systemPrompt
       );
 
       if (isStale()) return;
@@ -294,17 +305,11 @@ export function ShowNotesStep() {
         {(transcriptSource === "file" || !hasCleanvoiceTranscript) && (
           <>
             <div
-              ref={dropRef}
               onDrop={handleDrop}
-              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-              onDragLeave={(e) => {
-                if (!dropRef.current?.contains(e.relatedTarget as Node)) {
-                  setIsDragging(false);
-                }
-              }}
+              onDragOver={(e) => e.preventDefault()}
               onClick={!transcriptPath ? handleBrowseTranscript : undefined}
               style={{
-                border: `2px dashed ${isDragging ? "var(--color-sage)" : transcriptPath ? "var(--color-sage-dark)" : "var(--color-border)"}`,
+                border: `2px dashed ${transcriptPath ? "var(--color-sage-dark)" : "var(--color-border)"}`,
                 borderRadius: "12px",
                 padding: "32px 24px",
                 display: "flex",
@@ -313,9 +318,7 @@ export function ShowNotesStep() {
                 justifyContent: "center",
                 gap: "10px",
                 cursor: transcriptPath ? "default" : "pointer",
-                backgroundColor: isDragging
-                  ? "rgba(122, 139, 111, 0.06)"
-                  : "var(--color-surface)",
+                backgroundColor: "var(--color-surface)",
                 transition: "border-color 150ms ease, background-color 150ms ease",
               }}
             >
@@ -343,13 +346,13 @@ export function ShowNotesStep() {
                 </div>
               ) : (
                 <>
-                  <UploadCloud size={24} style={{ color: isDragging ? "var(--color-sage)" : "var(--color-text-muted)" }} />
+                  <UploadCloud size={24} style={{ color: "var(--color-text-muted)" }} />
                   <div style={{ textAlign: "center" }}>
                     <p style={{ fontFamily: "var(--font-body)", fontSize: "14px", fontWeight: "500", color: "var(--color-cream)", marginBottom: "4px" }}>
-                      Drop your transcript here
+                      Upload your transcript
                     </p>
                     <p style={{ fontFamily: "var(--font-body)", fontSize: "12px", color: "var(--color-text-muted)" }}>
-                      or <span style={{ color: "var(--color-sage)", textDecoration: "underline" }}>click to browse</span> — TXT, DOCX, PDF, MD
+                      <span style={{ color: "var(--color-sage)", textDecoration: "underline" }}>Click to browse</span> — TXT, DOCX, MD
                     </p>
                   </div>
                 </>

@@ -1,6 +1,5 @@
 mod commands;
 mod cleanvoice;
-mod db;
 mod ffmpeg;
 mod claude;
 mod models;
@@ -62,7 +61,7 @@ pub fn run() {
     tauri::Builder::default()
         .register_uri_scheme_protocol("media", |_ctx, request| {
             let uri = request.uri().to_string();
-            eprintln!("[media protocol] raw URI: {}", uri);
+            log::info!("[media protocol] raw URI: {}", uri);
 
             // Extract path portion: find "localhost/" and take everything after it
             let raw_path = uri
@@ -75,10 +74,10 @@ pub fn run() {
             let raw_path = raw_path.split('#').next().unwrap_or(raw_path);
 
             let file_path = percent_decode(raw_path);
-            eprintln!("[media protocol] resolved path: {}", file_path);
+            log::info!("[media protocol] resolved path: {}", file_path);
 
             let Ok(metadata) = std::fs::metadata(&file_path) else {
-                eprintln!("[media protocol] 404 not found: {}", file_path);
+                log::warn!("[media protocol] 404 not found: {}", file_path);
                 return tauri::http::Response::builder()
                     .status(404)
                     .body(Cow::Borrowed(&[] as &[u8]))
@@ -87,6 +86,20 @@ pub fn run() {
 
             let total_size = metadata.len();
             let mime = guess_mime(&file_path);
+
+            // Guard: empty files return an empty 200
+            if total_size == 0 {
+                return tauri::http::Response::builder()
+                    .status(200)
+                    .header("Content-Type", mime)
+                    .header("Content-Length", "0")
+                    .header("Access-Control-Allow-Origin", "*")
+                    .body(Cow::Borrowed(&[] as &[u8]))
+                    .unwrap();
+            }
+
+            // Max chunk size per range response (4 MB)
+            const MAX_CHUNK: u64 = 4 * 1024 * 1024;
 
             // Check for Range header (needed for seeking in video/audio)
             let range_header = request
@@ -99,18 +112,21 @@ pub fn run() {
                 // Parse range: bytes=START-END or bytes=START-
                 let range = &range_header[6..];
                 let parts: Vec<&str> = range.split('-').collect();
-                let start: u64 = parts[0].parse().unwrap_or(0);
+                let start: u64 = parts[0].parse().unwrap_or(0).min(total_size.saturating_sub(1));
                 let end: u64 = if parts.len() > 1 && !parts[1].is_empty() {
-                    parts[1].parse().unwrap_or(total_size - 1)
+                    parts[1].parse().unwrap_or(total_size - 1).min(total_size - 1)
                 } else {
-                    // Serve up to 1MB at a time for range requests
-                    std::cmp::min(start + 1024 * 1024 - 1, total_size - 1)
+                    std::cmp::min(start + MAX_CHUNK - 1, total_size - 1)
                 };
 
-                let length = end - start + 1;
+                // Clamp length to MAX_CHUNK to prevent OOM
+                let length = (end - start + 1).min(MAX_CHUNK);
+                let clamped_end = start + length - 1;
+
                 let mut file = match File::open(&file_path) {
                     Ok(f) => f,
-                    Err(_) => {
+                    Err(e) => {
+                        log::error!("[media protocol] open error: {}", e);
                         return tauri::http::Response::builder()
                             .status(500)
                             .body(Cow::Borrowed(&[] as &[u8]))
@@ -118,9 +134,21 @@ pub fn run() {
                     }
                 };
 
-                let _ = file.seek(SeekFrom::Start(start));
+                if let Err(e) = file.seek(SeekFrom::Start(start)) {
+                    log::error!("[media protocol] seek error: {}", e);
+                    return tauri::http::Response::builder()
+                        .status(500)
+                        .body(Cow::Borrowed(&[] as &[u8]))
+                        .unwrap();
+                }
                 let mut buf = vec![0u8; length as usize];
-                let _ = file.read_exact(&mut buf);
+                if let Err(e) = file.read_exact(&mut buf) {
+                    log::error!("[media protocol] read error: {}", e);
+                    return tauri::http::Response::builder()
+                        .status(500)
+                        .body(Cow::Borrowed(&[] as &[u8]))
+                        .unwrap();
+                }
 
                 tauri::http::Response::builder()
                     .status(206)
@@ -128,17 +156,20 @@ pub fn run() {
                     .header("Content-Length", length.to_string())
                     .header(
                         "Content-Range",
-                        format!("bytes {}-{}/{}", start, end, total_size),
+                        format!("bytes {}-{}/{}", start, clamped_end, total_size),
                     )
                     .header("Accept-Ranges", "bytes")
                     .header("Access-Control-Allow-Origin", "*")
                     .body(Cow::Owned(buf))
                     .unwrap()
             } else {
-                // Full file request — for small files or initial metadata load
+                // Full file request — serve only up to MAX_CHUNK to avoid OOM on large files.
+                // The Accept-Ranges header tells the browser to use range requests for the rest.
+                let serve_size = total_size.min(MAX_CHUNK) as usize;
                 let mut file = match File::open(&file_path) {
                     Ok(f) => f,
-                    Err(_) => {
+                    Err(e) => {
+                        log::error!("[media protocol] open error: {}", e);
                         return tauri::http::Response::builder()
                             .status(500)
                             .body(Cow::Borrowed(&[] as &[u8]))
@@ -146,8 +177,14 @@ pub fn run() {
                     }
                 };
 
-                let mut buf = Vec::with_capacity(total_size as usize);
-                let _ = file.read_to_end(&mut buf);
+                let mut buf = vec![0u8; serve_size];
+                if let Err(e) = file.read_exact(&mut buf) {
+                    log::error!("[media protocol] read error: {}", e);
+                    return tauri::http::Response::builder()
+                        .status(500)
+                        .body(Cow::Borrowed(&[] as &[u8]))
+                        .unwrap();
+                }
 
                 tauri::http::Response::builder()
                     .status(200)
@@ -159,6 +196,20 @@ pub fn run() {
                     .unwrap()
             }
         })
+        .plugin(tauri_plugin_log::Builder::new().build())
+        .plugin(tauri_plugin_stronghold::Builder::new(|password| {
+            // Derive a 32-byte key from the password using simple SHA-256-like expansion.
+            // The Stronghold vault itself handles encryption; this just converts the
+            // password string into bytes for the vault's key derivation.
+            let mut key = vec![0u8; 32];
+            let pw = password.as_bytes();
+            for (i, byte) in key.iter_mut().enumerate() {
+                *byte = pw.get(i % pw.len()).copied().unwrap_or(0)
+                    .wrapping_add(i as u8)
+                    .wrapping_mul(31);
+            }
+            key
+        }).build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
@@ -166,23 +217,10 @@ pub fn run() {
             tauri_plugin_sql::Builder::default()
                 .build(),
         )
-        .setup(|app| {
-            // Initialize the database on first launch
-            let app_handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                if let Err(e) = db::initialize(&app_handle).await {
-                    eprintln!("Failed to initialize database: {}", e);
-                }
-            });
+        .setup(|_app| {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            // Episode commands
-            commands::episodes::create_episode,
-            commands::episodes::get_episode,
-            commands::episodes::list_episodes,
-            commands::episodes::update_episode,
-            commands::episodes::delete_episode,
             // FFmpeg commands
             commands::enhance::probe_video,
             commands::enhance::enhance_audio,

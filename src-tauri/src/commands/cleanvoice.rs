@@ -149,7 +149,7 @@ fn extract_transcript_text(transcript: &serde_json::Value) -> String {
     }
 
     // Fallback: serialize to string for debugging
-    eprintln!("[Cleanvoice] Unknown transcript format: {}", transcript);
+    log::info!("[Cleanvoice] Unknown transcript format: {}", transcript);
     String::new()
 }
 
@@ -166,11 +166,11 @@ pub async fn cleanvoice_enhance(
 ) -> Result<CleanvoiceEnhanceResult, String> {
     // Reset cancellation flag
     {
-        let mut cancelled = CANCELLED.lock().unwrap();
+        let mut cancelled = CANCELLED.lock().unwrap_or_else(|e| e.into_inner());
         *cancelled = false;
     }
 
-    eprintln!("[Cleanvoice] Starting enhancement for: {}", request.input_path);
+    log::info!("[Cleanvoice] Starting enhancement for: {}", request.input_path);
 
     let client = CleanvoiceClient::new(&request.api_key);
     let input_path = PathBuf::from(&request.input_path);
@@ -230,22 +230,22 @@ pub async fn cleanvoice_enhance(
         )
         .await?;
 
-        eprintln!("[Cleanvoice] Audio extracted to: {}", temp_audio.display());
+        log::info!("[Cleanvoice] Audio extracted to: {}", temp_audio.display());
         (temp_audio, true) // Will need to mux back after
     } else if is_video && has_editing {
         // Editing features: send the video directly
         config.video = Some(true);
-        eprintln!("[Cleanvoice] Sending video directly (editing features enabled)");
+        log::info!("[Cleanvoice] Sending video directly (editing features enabled)");
         (input_path.clone(), false) // Cleanvoice returns edited video
     } else {
         // Already an audio file
-        eprintln!("[Cleanvoice] Input is already audio");
+        log::info!("[Cleanvoice] Input is already audio");
         (input_path.clone(), false)
     };
 
     // Check cancellation
     {
-        let cancelled = CANCELLED.lock().unwrap();
+        let cancelled = CANCELLED.lock().unwrap_or_else(|e| e.into_inner());
         if *cancelled {
             return Err("Processing cancelled".to_string());
         }
@@ -268,7 +268,7 @@ pub async fn cleanvoice_enhance(
         .enhance(&file_to_upload, &cleanvoice_output, config, move |progress: CleanvoiceProgress| {
             // Check cancellation
             {
-                let cancelled = CANCELLED.lock().unwrap();
+                let cancelled = CANCELLED.lock().unwrap_or_else(|e| e.into_inner());
                 if *cancelled {
                     return;
                 }
@@ -277,7 +277,7 @@ pub async fn cleanvoice_enhance(
         })
         .await
         .map_err(|e| {
-            let cancelled = CANCELLED.lock().unwrap();
+            let cancelled = CANCELLED.lock().unwrap_or_else(|e| e.into_inner());
             if *cancelled {
                 return "Processing cancelled".to_string();
             }
@@ -332,15 +332,15 @@ pub async fn cleanvoice_enhance(
         if let Some(ref transcript) = edit_result.transcript {
             let text = extract_transcript_text(transcript);
             if !text.is_empty() {
-                eprintln!("[Cleanvoice] Transcript extracted ({} chars)", text.len());
+                log::info!("[Cleanvoice] Transcript extracted ({} chars)", text.len());
                 // Also emit event for backward compat
                 let _ = app.emit("cleanvoice-transcript", &text);
                 transcript_text_result = Some(text);
             } else {
-                eprintln!("[Cleanvoice] WARNING: transcript field present but extracted text is empty");
+                log::info!("[Cleanvoice] WARNING: transcript field present but extracted text is empty");
             }
         } else {
-            eprintln!("[Cleanvoice] WARNING: No transcript field in result");
+            log::info!("[Cleanvoice] WARNING: No transcript field in result");
         }
     }
 
@@ -352,7 +352,7 @@ pub async fn cleanvoice_enhance(
 
 #[tauri::command]
 pub async fn cleanvoice_cancel() -> Result<(), String> {
-    let mut cancelled = CANCELLED.lock().unwrap();
+    let mut cancelled = CANCELLED.lock().unwrap_or_else(|e| e.into_inner());
     *cancelled = true;
     Ok(())
 }
