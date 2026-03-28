@@ -27,7 +27,7 @@ pub struct TokenResponse {
 pub struct UploadAuthorizeResponse {
     pub presigned_url: String,
     pub file_key: String,
-    pub expire_at: Option<String>,
+    pub expire_at: Option<u64>,
 }
 
 /// Response from GET /v1/podcasts
