@@ -10,7 +10,7 @@ import { Button } from "../ui/Button";
 import { extractFrame, removeBackground } from "../../lib/tauri";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { readFile } from "@tauri-apps/plugin-fs";
-import { appDataDir } from "@tauri-apps/api/path";
+import { appDataDir, join } from "@tauri-apps/api/path";
 
 interface FrameSlot {
   id: number;
@@ -60,7 +60,7 @@ export function FrameCapture({ videoPath, onPhotosChange }: FrameCaptureProps) {
     try {
       const secs = parseTimestamp(slot.timestamp);
       const dataDir = await appDataDir();
-      const outputPath = `${dataDir}frame_${slot.id}_${Date.now()}.png`;
+      const outputPath = await join(dataDir, `frame_${slot.id}_${Date.now()}.png`);
       await extractFrame(videoPath, secs, outputPath);
 
       // Read the extracted frame as base64
@@ -93,7 +93,7 @@ export function FrameCapture({ videoPath, onPhotosChange }: FrameCaptureProps) {
     try {
       // Write the raw frame to a temp file for the API
       const dataDir = await appDataDir();
-      const tempPath = `${dataDir}rembg_input_${slot.id}.png`;
+      const tempPath = await join(dataDir, `rembg_input_${slot.id}.png`);
 
       // Decode base64 and write
       const { writeFile: tauriWriteFile } = await import("@tauri-apps/plugin-fs");
