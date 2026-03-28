@@ -12,16 +12,24 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 
 /// Allowed directories for media:// protocol access.
-/// Returns a list of base directories that the media protocol may serve files from.
+/// Returns a list of canonicalized base directories that the media protocol may serve files from.
+/// We canonicalize here so that comparisons with canonicalized request paths work correctly
+/// on Windows, where std::fs::canonicalize adds the \\?\ extended-length prefix.
 fn allowed_media_dirs() -> Vec<std::path::PathBuf> {
     let mut dirs = Vec::new();
-    if let Some(d) = dirs::video_dir() { dirs.push(d); }
-    if let Some(d) = dirs::document_dir() { dirs.push(d); }
-    if let Some(d) = dirs::desktop_dir() { dirs.push(d); }
-    if let Some(d) = dirs::download_dir() { dirs.push(d); }
-    if let Some(d) = dirs::home_dir() { dirs.push(d); }
-    if let Some(d) = dirs::data_dir() { dirs.push(d); }
-    if let Some(d) = dirs::data_local_dir() { dirs.push(d); }
+    for dir in [
+        dirs::video_dir(),
+        dirs::document_dir(),
+        dirs::desktop_dir(),
+        dirs::download_dir(),
+        dirs::home_dir(),
+        dirs::data_dir(),
+        dirs::data_local_dir(),
+    ] {
+        if let Some(d) = dir {
+            dirs.push(std::fs::canonicalize(&d).unwrap_or(d));
+        }
+    }
     dirs
 }
 
@@ -93,9 +101,11 @@ pub fn run() {
             // Security: validate the resolved path is under an allowed directory
             let canonical = std::fs::canonicalize(&file_path).unwrap_or_else(|_| std::path::PathBuf::from(&file_path));
             let allowed = allowed_media_dirs();
+            log::info!("[media protocol] canonical path: {:?}", canonical);
             let is_allowed = allowed.iter().any(|prefix| canonical.starts_with(prefix));
             if !is_allowed {
-                log::warn!("[media protocol] 403 path not in allowed directories: {}", file_path);
+                log::warn!("[media protocol] 403 path not in allowed directories: {:?}", canonical);
+                log::warn!("[media protocol] allowed dirs: {:?}", allowed);
                 return tauri::http::Response::builder()
                     .status(403)
                     .body(Cow::Borrowed(&[] as &[u8]))
