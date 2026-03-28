@@ -1,9 +1,11 @@
 import { forwardRef } from "react";
-import type { ThumbnailConfig } from "../../stores/episodeStore";
+import type { ThumbnailConfig, PhotoPosition } from "../../stores/episodeStore";
+import { YouTubeStyleTemplate } from "./YouTubeStyleTemplate";
 
 interface ThumbnailPreviewProps {
   config: ThumbnailConfig;
   scale?: number;
+  onPhotoPositionChange?: (index: number, pos: PhotoPosition) => void;
 }
 
 const WIDTH = 1280;
@@ -337,9 +339,13 @@ function SplitPanelTemplate({ config }: { config: ThumbnailConfig }) {
  * The inner ref provides the full-size element for export.
  */
 export const ThumbnailPreview = forwardRef<HTMLDivElement, ThumbnailPreviewProps>(
-  function ThumbnailPreview({ config, scale = 0.5 }, ref) {
-    const Template =
-      config.templateId === "split-panel" ? SplitPanelTemplate : BoldBannerTemplate;
+  function ThumbnailPreview({ config, scale = 0.5, onPhotoPositionChange }, ref) {
+    const isYouTube = config.templateId === "youtube-style";
+    const Template = isYouTube
+      ? null
+      : config.templateId === "split-panel"
+        ? SplitPanelTemplate
+        : BoldBannerTemplate;
 
     return (
       <div
@@ -361,7 +367,15 @@ export const ThumbnailPreview = forwardRef<HTMLDivElement, ThumbnailPreviewProps
             transformOrigin: "top left",
           }}
         >
-          <Template config={config} />
+          {isYouTube ? (
+            <YouTubeStyleTemplate
+              config={config}
+              scale={scale}
+              onPhotoPositionChange={onPhotoPositionChange}
+            />
+          ) : (
+            Template && <Template config={config} />
+          )}
         </div>
       </div>
     );

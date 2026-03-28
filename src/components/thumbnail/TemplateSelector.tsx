@@ -47,6 +47,22 @@ export function TemplateSelector({ selectedId, onSelect }: TemplateSelectorProps
                   <div style={{ position: "absolute", right: "10px", bottom: "4px", width: "20px", height: "30px", backgroundColor: "rgba(255,255,255,0.2)", borderRadius: "3px 3px 0 0" }} />
                   <div style={{ position: "absolute", right: "34px", bottom: "4px", width: "20px", height: "28px", backgroundColor: "rgba(255,255,255,0.15)", borderRadius: "3px 3px 0 0" }} />
                 </div>
+              ) : template.id === "youtube-style" ? (
+                // YouTube Style mini preview
+                <div style={{ width: "100%", height: "100%", position: "relative", backgroundColor: "#2A3A2A" }}>
+                  {/* Background pattern */}
+                  <div style={{ position: "absolute", inset: 0, background: "linear-gradient(135deg, #3A4A3A 25%, #2A3A2A 50%, #3A4A3A 75%)", opacity: 0.5 }} />
+                  {/* Top title bar */}
+                  <div style={{ position: "absolute", top: "6px", left: "50%", transform: "translateX(-50%)", width: "60%", height: "10px", backgroundColor: "#CC0000", border: "1px solid #fff", borderRadius: "1px" }} />
+                  {/* Guest silhouettes */}
+                  <div style={{ position: "absolute", bottom: "12px", left: "50%", transform: "translateX(-50%)", display: "flex", gap: "4px" }}>
+                    <div style={{ width: "14px", height: "22px", backgroundColor: "rgba(255,255,255,0.25)", borderRadius: "3px 3px 0 0" }} />
+                    <div style={{ width: "14px", height: "26px", backgroundColor: "rgba(255,255,255,0.3)", borderRadius: "3px 3px 0 0" }} />
+                    <div style={{ width: "14px", height: "22px", backgroundColor: "rgba(255,255,255,0.25)", borderRadius: "3px 3px 0 0" }} />
+                  </div>
+                  {/* Bottom title bar */}
+                  <div style={{ position: "absolute", bottom: "4px", left: "50%", transform: "translateX(-50%)", width: "50%", height: "8px", backgroundColor: "#2E7D32", border: "1px solid #fff", borderRadius: "1px" }} />
+                </div>
               ) : (
                 // Split Panel mini preview
                 <>
